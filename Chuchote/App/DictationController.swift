@@ -601,6 +601,8 @@ extension DictationController {
 
     /// Fenetre de la goutte (mode capture).
     var dropWindow: NSWindow? { drop?.nsWindow }
+    var dropGeometry: NotchGeometry? { drop?.geometry }
+    var dropHitRect: CGRect { drop?.hitRect ?? .zero }
 
     /// Amene la goutte au texte ecrit et colle.
     func snapshotDone() async {

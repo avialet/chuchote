@@ -10,7 +10,8 @@ import Foundation
 ///   sont ignores.
 /// - Un appui alors que la touche est deja enfoncee (repetition automatique) est
 ///   toujours ignore, meme apres une annulation ou une fin de transcription
-///   survenues touche enfoncee. Un relachement manque se rattrape au cycle suivant.
+///   survenues touche enfoncee. Un relachement manque se rattrape au cycle suivant,
+///   ou tout de suite par `resetKey()`.
 ///
 /// L'horloge est injectee : chaque evenement porte son instant (secondes,
 /// n'importe quelle origine monotone, par exemple `ProcessInfo.systemUptime`).
@@ -74,11 +75,20 @@ public struct HotKeyGesture: Sendable, Equatable {
         return .none
     }
 
-    /// Annule l'ecoute (Echap). Sans effet hors ecoute.
+    /// Annule l'ecoute ou la transcription en cours (Echap, bouton du panneau, delai
+    /// maximal de transcription). Sans effet au repos. Un `finished()` tardif est sans effet.
     public mutating func cancel() -> Action {
-        guard isListening else { return .none }
+        guard state != .idle else { return .none }
         state = .idle
         return .cancel
+    }
+
+    /// Relachement perdu (veille, session reprise, maintien anormalement long) :
+    /// la touche est consideree relachee. Un maintien devient un verrouillage, pour
+    /// que le prochain appui termine la dictee au lieu d'etre pris pour une repetition.
+    public mutating func resetKey() {
+        isKeyDown = false
+        if case .holding = state { state = .locked }
     }
 
     /// La transcription est terminee (ou a echoue) : pret pour une nouvelle dictee.

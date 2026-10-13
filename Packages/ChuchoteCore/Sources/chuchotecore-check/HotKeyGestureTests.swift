@@ -83,13 +83,54 @@ let hotKeyGestureTests: (String, [Test]) = ("HotKeyGesture", [
         expectEqual(g.cancel(), .cancel)
         expectEqual(g.state, .idle)
     },
-    Test("cancelOutsideListeningDoesNothing") {
+    Test("cancelWhenIdleDoesNothing") {
         var g = HotKeyGesture()
         expectEqual(g.cancel(), .none)
+        expectEqual(g.state, .idle)
+    },
+    Test("cancelWhileTranscribingThenLateFinished") {
+        var g = HotKeyGesture()
         _ = g.press(at: 10)
         _ = g.release(at: 11)
-        expectEqual(g.cancel(), .none)
+        expectEqual(g.cancel(), .cancel)
+        expectEqual(g.state, .idle)
+        // La fin de transcription arrivee apres l'annulation ne change rien.
+        g.finished()
+        expectEqual(g.state, .idle)
+        expectEqual(g.press(at: 12), .startListening)
+    },
+    Test("lostReleaseWhileHoldingThenResetKey") {
+        var g = HotKeyGesture()
+        _ = g.press(at: 10)
+        // Relachement perdu : sans remise a zero, l'appui suivant passe pour une repetition.
+        expectEqual(g.press(at: 200), .none)
+        expectEqual(g.state, .holding(since: 10))
+        g.resetKey()
+        expect(!g.isKeyDown)
+        // Le maintien devient un verrouillage : le prochain appui termine.
+        expectEqual(g.state, .locked)
+        expectEqual(g.press(at: 201), .finish)
         expectEqual(g.state, .transcribing)
+        expectEqual(g.release(at: 201.1), .none)
+    },
+    Test("resetKeyAfterCancelWithKeyHeld") {
+        var g = HotKeyGesture()
+        _ = g.press(at: 10)
+        _ = g.cancel()
+        g.resetKey()
+        expectEqual(g.state, .idle)
+        expectEqual(g.press(at: 20), .startListening)
+    },
+    Test("resetKeyKeepsLockedAndTranscribing") {
+        var g = HotKeyGesture()
+        _ = g.press(at: 10)
+        _ = g.release(at: 10.1)
+        g.resetKey()
+        expectEqual(g.state, .locked)
+        _ = g.press(at: 12)
+        g.resetKey()
+        expectEqual(g.state, .transcribing)
+        expect(!g.isKeyDown)
     },
     Test("autoRepeatAfterCancelWhileKeyHeldIsIgnored") {
         var g = HotKeyGesture()

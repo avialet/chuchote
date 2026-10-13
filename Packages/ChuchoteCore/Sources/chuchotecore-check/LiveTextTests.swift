@@ -76,6 +76,28 @@ let liveTextTests: (String, [Test]) = ("LiveText", [
         expectEqual(geometry.centerX, 2792)
         expectEqual(geometry.windowFrame(size: CGSize(width: 400, height: 100)).maxY, 1240)
     },
+    Test("hitRectIsTheVisibleDropOnly") {
+        let frame = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        let geometry = NotchGeometry(screenFrame: frame, safeAreaTop: 32,
+                                     auxiliaryLeft: CGRect(x: 0, y: 950, width: 654, height: 32),
+                                     auxiliaryRight: CGRect(x: 857, y: 950, width: 655, height: 32),
+                                     menuBarHeight: 32)
+        let hit = geometry.hitRect(expanded: true, dropHeight: 120)
+        expectEqual(hit, CGRect(x: 545.5, y: 862, width: 420, height: 120))
+        // La fenetre (marges comprises) deborde de la goutte : ses marges ne prennent aucun clic.
+        let window = geometry.windowFrame(size: CGSize(width: 476, height: 165))
+        expect(window.contains(CGPoint(x: window.minX + 8, y: window.maxY - 70)))
+        expect(!hit.contains(CGPoint(x: window.minX + 8, y: window.maxY - 70)))
+        expect(!hit.contains(CGPoint(x: window.midX, y: window.minY + 6)))
+        expect(hit.contains(CGPoint(x: hit.midX, y: hit.minY + 20)))
+    },
+    Test("hitRectIsEmptyWhileClosed") {
+        let geometry = NotchGeometry(screenFrame: CGRect(x: 0, y: 0, width: 1440, height: 900), safeAreaTop: 0,
+                                     auxiliaryLeft: nil, auxiliaryRight: nil, menuBarHeight: 24)
+        expect(geometry.hitRect(expanded: false, dropHeight: 120).isEmpty)
+        expect(geometry.hitRect(expanded: true, dropHeight: 0).isEmpty)
+        expectEqual(geometry.hitRect(expanded: true, dropHeight: 28).maxY, 900)
+    },
     Test("dropWidthLeavesRoomForBothWings") {
         expectEqual(NotchGeometry.dropWidth(notchWidth: 0), 420)
         expectEqual(NotchGeometry.dropWidth(notchWidth: 203), 420)

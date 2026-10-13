@@ -71,6 +71,14 @@ public struct NotchGeometry: Equatable, Sendable {
         CGRect(x: centerX - size.width / 2, y: screenFrame.maxY - size.height, width: size.width, height: size.height)
     }
 
+    /// Rectangle cliquable : la goutte visible seulement (largeur de la goutte, hauteur `dropHeight` depuis le
+    /// bord haut), vide tant qu'elle n'est pas ouverte. Hors de ce rectangle, la fenetre laisse passer les clics.
+    public func hitRect(expanded: Bool, dropHeight: CGFloat) -> CGRect {
+        guard expanded, dropHeight > 0 else { return .zero }
+        let width = Self.dropWidth(notchWidth: notchWidth)
+        return CGRect(x: centerX - width / 2, y: screenFrame.maxY - dropHeight, width: width, height: dropHeight)
+    }
+
     /// Largeur de la goutte ouverte : 420 pt, ou plus pour laisser 100 pt de chaque cote d'une large encoche.
     public static func dropWidth(notchWidth: CGFloat) -> CGFloat {
         max(420, notchWidth + 200)

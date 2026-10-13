@@ -101,6 +101,8 @@ private final class MicrophoneTap: @unchecked Sendable {
     private let publish: @MainActor (Double) -> Void
     private var meter = LevelMeter()
     private var sinceLastPublish: TimeInterval = 1
+    /// Pose par `finish()` (MainActor) : un niveau deja en route vers le MainActor n'est plus publie.
+    @MainActor private var stopped = false
     private static let publishInterval: TimeInterval = 1.0 / 30
 
     init(converter: PCMConverter, continuation: AsyncStream<AudioChunk>.Continuation,
@@ -122,10 +124,17 @@ private final class MicrophoneTap: @unchecked Sendable {
         sinceLastPublish += chunk.duration
         if sinceLastPublish >= Self.publishInterval {
             sinceLastPublish = 0
-            let publish = publish
-            DispatchQueue.main.async { MainActor.assumeIsolated { publish(level) } }
+            DispatchQueue.main.async { [self] in
+                MainActor.assumeIsolated {
+                    guard !stopped else { return }
+                    publish(level)
+                }
+            }
         }
     }
 
-    func finish() { continuation.finish() }
+    @MainActor func finish() {
+        stopped = true
+        continuation.finish()
+    }
 }

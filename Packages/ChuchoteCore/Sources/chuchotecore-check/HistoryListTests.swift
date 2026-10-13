@@ -55,6 +55,8 @@ let historyListTests: (String, [Test]) = ("HistoryList", [
         expectEqual(DictationFormat.words(1), "1\u{00A0}mot")
         expectEqual(DictationFormat.words(2), "2\u{00A0}mots")
         expectEqual(DictationFormat.words(1250), "1\u{202F}250\u{00A0}mots")
+        expectEqual(DictationFormat.number(1250), "1\u{202F}250")
+        expectEqual(DictationFormat.number(42), "42")
     },
 
     Test("meta : app cible, duree, mots") {

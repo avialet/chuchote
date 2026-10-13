@@ -41,14 +41,18 @@ public enum DictationFormat {
         return "\(minutes)\(nbsp)min\(nbsp)" + String(format: "%02d", rest)
     }
 
-    /// << 1 mot >>, << 24 mots >>, << 1 250 mots >> (espace fine insecable des milliers).
-    public static func words(_ count: Int) -> String {
+    /// << 1 250 >> : espace fine insecable des milliers.
+    public static func number(_ value: Int) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
         formatter.groupingSeparator = "\u{202F}"
         formatter.usesGroupingSeparator = true
-        let number = formatter.string(from: NSNumber(value: count)) ?? String(count)
-        return number + nbsp + (count > 1 ? "mots" : "mot")
+        return formatter.string(from: NSNumber(value: value)) ?? String(value)
+    }
+
+    /// << 1 mot >>, << 24 mots >>, << 1 250 mots >>.
+    public static func words(_ count: Int) -> String {
+        number(count) + nbsp + (count > 1 ? "mots" : "mot")
     }
 
     /// Horodatage d'une ligne : l'heure (<< 09:05 >>) aujourd'hui et hier, la date ensuite

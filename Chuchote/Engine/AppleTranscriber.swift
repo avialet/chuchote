@@ -179,7 +179,14 @@ private actor SessionPool {
         let locale = locale
         let task = Task { try await Session.make(locale: locale) }
         making = task
-        let session = try await task.value
+        let session: Session
+        do {
+            session = try await task.value
+        } catch {
+            // Echec : la prochaine preparation doit pouvoir reessayer.
+            if making == task { making = nil }
+            throw error
+        }
         // `take()` a pu prendre la tache entre-temps : la session est alors deja utilisee.
         if making == task {
             making = nil

@@ -1,0 +1,131 @@
+import AVFoundation
+import ChuchoteCore
+
+/// Source d'audio de la dictee : le micro, ou une source figee pour le mode capture.
+@MainActor
+protocol AudioSource: AnyObject {
+    /// Niveau 0-1 lisse (attaque 60 ms, relache 250 ms), publie sur le MainActor (~30 Hz).
+    var onLevel: ((Double) -> Void)? { get set }
+    /// Vrai si l'ecoute est autorisee (demande la permission au premier usage).
+    func authorize() async -> Bool
+    /// Demarre l'ecoute : blocs mono Float32 a `sampleRate`, jusqu'a `stop()`.
+    func start(sampleRate: Double) throws -> AsyncStream<AudioChunk>
+    /// Arrete l'ecoute et termine le flux.
+    func stop()
+}
+
+/// Micro par AVAudioEngine. Le moteur est prepare a l'avance (`prepare()`), mais ne tourne que
+/// pendant l'ecoute : aucun indicateur de micro au repos.
+@MainActor
+final class Microphone: AudioSource {
+    enum Failure: LocalizedError {
+        case noInput
+        case engine(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .noInput: "Aucun micro disponible."
+            case .engine(let message): "Micro indisponible : \(message)"
+            }
+        }
+    }
+
+    var onLevel: ((Double) -> Void)?
+    private let engine = AVAudioEngine()
+    private var tap: MicrophoneTap?
+    private var isPrepared = false
+
+    static var isAuthorized: Bool { AVCaptureDevice.authorizationStatus(for: .audio) == .authorized }
+    static var isDenied: Bool {
+        let status = AVCaptureDevice.authorizationStatus(for: .audio)
+        return status == .denied || status == .restricted
+    }
+
+    func authorize() async -> Bool {
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized: return true
+        case .notDetermined: return await AVCaptureDevice.requestAccess(for: .audio)
+        default: return false
+        }
+    }
+
+    /// Prepare le moteur (sans demarrer le micro) si l'acces est deja accorde.
+    func prepare() {
+        guard Self.isAuthorized, !isPrepared, tap == nil else { return }
+        _ = engine.inputNode
+        engine.prepare()
+        isPrepared = true
+    }
+
+    func start(sampleRate: Double) throws -> AsyncStream<AudioChunk> {
+        stop()
+        let input = engine.inputNode
+        let format = input.outputFormat(forBus: 0)
+        guard format.sampleRate > 0, format.channelCount > 0,
+              let target = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate,
+                                         channels: 1, interleaved: false),
+              let converter = PCMConverter(from: format, to: target) else { throw Failure.noInput }
+        let (stream, continuation) = AsyncStream<AudioChunk>.makeStream()
+        let tap = MicrophoneTap(converter: converter, continuation: continuation) { [weak self] level in
+            self?.onLevel?(level)
+        }
+        input.installTap(onBus: 0, bufferSize: 1024, format: format, block: tap.block())
+        do {
+            try engine.start()
+        } catch {
+            input.removeTap(onBus: 0)
+            continuation.finish()
+            throw Failure.engine(error.localizedDescription)
+        }
+        self.tap = tap
+        return stream
+    }
+
+    func stop() {
+        guard let tap else { return }
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+        tap.finish()
+        self.tap = nil
+        onLevel?(0)
+        // Pret pour la prochaine ecoute.
+        engine.prepare()
+        isPrepared = true
+    }
+}
+
+/// Etat du tap, utilise sur le fil audio : conversion, niveau, emission des blocs.
+private final class MicrophoneTap: @unchecked Sendable {
+    private let converter: PCMConverter
+    private let continuation: AsyncStream<AudioChunk>.Continuation
+    private let publish: @MainActor (Double) -> Void
+    private var meter = LevelMeter()
+    private var sinceLastPublish: TimeInterval = 1
+    private static let publishInterval: TimeInterval = 1.0 / 30
+
+    init(converter: PCMConverter, continuation: AsyncStream<AudioChunk>.Continuation,
+         publish: @escaping @MainActor (Double) -> Void) {
+        self.converter = converter
+        self.continuation = continuation
+        self.publish = publish
+    }
+
+    /// Bloc du tap, construit hors du MainActor : il est appele sur le fil audio.
+    nonisolated func block() -> AVAudioNodeTapBlock {
+        { [self] buffer, _ in handle(buffer) }
+    }
+
+    private func handle(_ buffer: AVAudioPCMBuffer) {
+        guard let converted = converter.convert(buffer), let chunk = AudioChunk(buffer: converted) else { return }
+        continuation.yield(chunk)
+        let level = meter.feed(samples: chunk.samples, dt: chunk.duration)
+        sinceLastPublish += chunk.duration
+        if sinceLastPublish >= Self.publishInterval {
+            sinceLastPublish = 0
+            let publish = publish
+            DispatchQueue.main.async { MainActor.assumeIsolated { publish(level) } }
+        }
+    }
+
+    func finish() { continuation.finish() }
+}

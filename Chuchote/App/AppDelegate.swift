@@ -35,8 +35,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 /// Mode capture sans ecran (voir SnapshotRunner) : `Chuchote -ChuchoteSnapshot <dossier>
 /// [-ChuchoteSnapshotSeed 1] [-ChuchoteSnapshotAppearance dark] [-ChuchoteSnapshotOnly a,b]
 /// [-ChuchoteSnapshotSize 1000x720]`, avec CHUCHOTE_DB_PATH vers une base jetable. Ecrit
-/// `mainWindow`, `settings`, `about`, `listening` et `writing` (panneau d'ecoute, moteur factice et
-/// niveau fige), `blob-niveaux` (planche du blob), `empty` (historique vide) et `welcome` (carte
+/// `mainWindow`, `settings`, `about`, `listening` et `writing` (pilule d'ecoute, moteur factice et
+/// niveau fige), `drop`, `dropWriting` et `dropDone` (goutte d'encoche avec texte en direct fictif),
+/// `drop-encoche` (planche de la goutte sur un faux haut d'ecran), `blob-niveaux` (planche du blob), `empty` (historique vide) et `welcome` (carte
 /// d'accueil, historique vide) (`-sombre` en sombre) dans le dossier, puis quitte. Autorisations et
 /// langue figees : tout en ordre, sauf pour `welcome`.
 extension AppDelegate {
@@ -49,6 +50,7 @@ extension AppDelegate {
         state.reload()
         let standard = SnapshotRunner.standardScenarios(mainWindow: { WindowSummoner.mainWindow }, identity: Brand.identity)
         let dictation = DictationController.snapshot()
+        let drop = DictationController.snapshot(style: .drop)
         func panel() -> NSWindow? { NSApp.windows.first { $0 is FloatingPanel && $0.isVisible } }
         let panels = [
             // Remplace le scenario standard : le panneau n'existe qu'une fois montre.
@@ -63,6 +65,40 @@ extension AppDelegate {
             SnapshotScenario("writing") {
                 await dictation.snapshotWriting()
                 return panel()
+            },
+            SnapshotScenario("drop") {
+                await drop.snapshotListening()
+                return drop.dropWindow
+            },
+            SnapshotScenario("dropWriting") {
+                await drop.snapshotWriting()
+                return drop.dropWindow
+            },
+            SnapshotScenario("dropDone") {
+                await drop.snapshotDone()
+                return drop.dropWindow
+            },
+            SnapshotScenario("drop-ouverture") {
+                // Images de l'ouverture (ms apres l'appui) a cote de la capture finale.
+                let folder = CommandLine.arguments.firstIndex(of: "-\(Brand.name)Snapshot")
+                    .map { URL(fileURLWithPath: CommandLine.arguments[$0 + 1]) }
+                let opening = DictationController.snapshot(style: .drop)
+                opening.keyPressed()
+                var elapsed = 0
+                for ms in [16, 60, 120, 200, 320] {
+                    try await Task.sleep(for: .milliseconds(ms - elapsed))
+                    elapsed = ms
+                    if let folder, let window = opening.dropWindow {
+                        try? WindowSnapshot.write(window, to: folder.appendingPathComponent("drop-ouverture-\(ms).png"))
+                    }
+                }
+                try await Task.sleep(for: .milliseconds(300))
+                return opening.dropWindow
+            },
+            SnapshotScenario("drop-encoche") {
+                let window = DropBoard.window()
+                try await Task.sleep(for: .milliseconds(400))
+                return window
             },
             SnapshotScenario("blob-niveaux") {
                 let window = BlobBoard.window()

@@ -1,5 +1,5 @@
 {
-  "originHash" : "5be9dabd901522f20e943b903d7e16ba29ecceda203c0bd4af937c21858c051d",
+  "originHash" : "1a91b5bd8cfdd45ab82c9db18c9cfe5b6743eac68bd74f8e393237781ff0699f",
   "pins" : [
     {
       "identity" : "grdb.swift",
@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/avialet/vialetkit.git",
       "state" : {
-        "revision" : "65b5b5ce69b1118d5ce97ecdfe189c86a2a9009b",
-        "version" : "0.2.1"
+        "revision" : "a009e8e9a34ab448387caa6be64a0abef103820a",
+        "version" : "0.2.2"
       }
     }
   ],

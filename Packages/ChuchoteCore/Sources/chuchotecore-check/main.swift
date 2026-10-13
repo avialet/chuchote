@@ -6,4 +6,5 @@ run([
     transcriberTests,
     polishTests,
     levelMeterTests,
+    dictationStoreTests,
 ])

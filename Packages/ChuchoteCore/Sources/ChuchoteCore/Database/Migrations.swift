@@ -23,6 +23,18 @@ enum Migrations {
             // }
         }
 
+        m.registerMigration("v2") { db in
+            try db.create(table: "dictation") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("text", .text).notNull()
+                t.column("createdAt", .datetime).notNull().indexed()
+                t.column("duration", .double).notNull()
+                t.column("words", .integer).notNull()
+                t.column("locale", .text).notNull()
+                t.column("targetApp", .text)
+            }
+        }
+
         return m
     }
 }

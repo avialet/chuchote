@@ -5,7 +5,8 @@ import ChuchoteCore
 /// Essai du moteur sans micro (DEBUG) : `Chuchote -ChuchoteEngineCheck <fichier audio> [-ChuchoteEngineCheckOut <rapport>]`.
 /// Lit le fichier en blocs de 100 ms au rythme reel, le passe deux fois dans AppleTranscriber (la premiere
 /// apres la preparation : moteur chaud ; la seconde comme une dictee suivante), et mesure la latence entre
-/// la fin de l'audio et la fin du texte. Imprime le rapport (et l'ecrit dans le fichier demande), puis quitte.
+/// la fin de l'audio et la fin du texte, sans puis avec l'apercu en direct (premier apercu, nombre).
+/// Imprime le rapport (et l'ecrit dans le fichier demande), puis quitte.
 enum EngineCheck {
     static func runIfRequested() -> Bool {
         let args = CommandLine.arguments
@@ -29,15 +30,23 @@ enum EngineCheck {
             let locale = DictationController.currentLocale
             lines.append("fichier : \(file.lastPathComponent), \(String(format: "%.2f", seconds)) s, langue \(locale.identifier)")
             lines.append("ressources : \(await AppleTranscriber.assetState(for: locale))")
-            let engine = AppleTranscriber(locale: locale)
-            let clock = ContinuousClock()
-            let prepare = try await clock.measure { try await engine.prepare() }
-            lines.append("preparation (moteur froid -> chaud) : \(milliseconds(prepare)) ms")
-            for pass in 1...2 {
-                let (text, latency) = try await transcribe(chunks, with: engine)
-                lines.append("passe \(pass) : fin de l'audio -> texte : \(milliseconds(latency)) ms")
-                lines.append("  brut : \(text)")
-                lines.append("  poli : \(Polish.apply(text, locale: locale.identifier, frenchTypography: true))")
+            for liveText in [false, true] {
+                lines.append(liveText ? "avec apercu en direct" : "sans apercu")
+                let engine = AppleTranscriber(locale: locale, liveText: liveText)
+                let clock = ContinuousClock()
+                let prepare = try await clock.measure { try await engine.prepare() }
+                lines.append("  preparation (moteur froid -> chaud) : \(milliseconds(prepare)) ms")
+                for pass in 1...2 {
+                    let run = try await transcribe(chunks, with: engine)
+                    lines.append("  passe \(pass) : fin de l'audio -> texte : \(milliseconds(run.latency)) ms")
+                    if liveText {
+                        let first = run.firstPreview.map { "\(milliseconds($0)) ms" } ?? "aucun"
+                        lines.append("    apercus : \(run.previews), premier \(first) apres le debut de l'audio")
+                        lines.append("    dernier apercu : \(run.preview)")
+                    }
+                    lines.append("    brut : \(run.text)")
+                    lines.append("    poli : \(Polish.apply(run.text, locale: locale.identifier, frenchTypography: true))")
+                }
             }
         } catch {
             lines.append("echec : \(error)")
@@ -45,14 +54,31 @@ enum EngineCheck {
         return lines.joined(separator: "\n")
     }
 
+    private struct Run {
+        var text: String
+        var preview: String
+        var latency: Duration
+        var previews: Int
+        var firstPreview: Duration?
+    }
+
     /// Envoie les blocs au rythme reel, termine l'audio, et mesure jusqu'a la fin du flux.
-    private static func transcribe(_ chunks: [AudioChunk], with engine: AppleTranscriber) async throws -> (String, Duration) {
+    private static func transcribe(_ chunks: [AudioChunk], with engine: AppleTranscriber) async throws -> Run {
         let (audio, feed) = AsyncStream<AudioChunk>.makeStream()
         let output = engine.transcribe(audio)
+        let start = ContinuousClock.now
         let reader = Task {
             var buffer = TranscriptBuffer()
-            for try await transcript in output { buffer.add(transcript) }
-            return (buffer.text, ContinuousClock.now)
+            var previews = 0
+            var first: Duration?
+            for try await transcript in output {
+                if transcript.isPreview {
+                    previews += 1
+                    if first == nil { first = ContinuousClock.now - start }
+                }
+                buffer.add(transcript)
+            }
+            return (buffer, previews, first, ContinuousClock.now)
         }
         for chunk in chunks {
             feed.yield(chunk)
@@ -60,8 +86,9 @@ enum EngineCheck {
         }
         let end = ContinuousClock.now
         feed.finish()
-        let (text, done) = try await reader.value
-        return (text, done - end)
+        let (buffer, previews, first, done) = try await reader.value
+        return Run(text: buffer.text, preview: buffer.preview, latency: done - end, previews: previews,
+                   firstPreview: first)
     }
 
     /// Blocs mono Float32 de 100 ms a la frequence de la dictee.

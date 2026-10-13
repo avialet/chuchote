@@ -5,13 +5,19 @@ import Speech
 /// Moteur Apple (Speech, macOS 26) : `SpeechAnalyzer` + `SpeechTranscriber(locale:preset: .transcription)`.
 /// Moteur chaud : une session (module + analyseur prepare) attend la prochaine dictee ; elle est
 /// remplacee en arriere-plan apres chaque usage. Le modele reste charge le temps du processus.
+/// `liveText` : un second analyseur, `.progressiveTranscription`, lit le meme audio et emet des apercus
+/// (`Transcript.isPreview`) pendant la parole ; il s'arrete a la fin de l'audio. Le texte colle vient
+/// toujours du preset `.transcription`. Deux analyseurs et non deux modules sur un meme analyseur :
+/// ainsi assemble, l'apercu n'arrivait parfois qu'a la fin de l'audio (mesure, 0.2.0).
 final class AppleTranscriber: Transcriber {
     let locale: Locale
+    let liveText: Bool
     private let pool: SessionPool
 
-    init(locale: Locale) {
+    init(locale: Locale, liveText: Bool = false) {
         self.locale = locale
-        self.pool = SessionPool(locale: locale)
+        self.liveText = liveText
+        self.pool = SessionPool(locale: locale, liveText: liveText)
     }
 
     /// Prepare la prochaine session (chargement du modele). A appeler au lancement.
@@ -71,8 +77,10 @@ final class AppleTranscriber: Transcriber {
     static func installAssets(for locale: Locale,
                               progress: @escaping @MainActor @Sendable (Double) -> Void) async throws {
         guard let supported = await supportedLocale(for: locale) else { return }
-        let module = SpeechTranscriber(locale: supported, preset: .transcription)
-        guard let request = try await AssetInventory.assetInstallationRequest(supporting: [module]) else { return }
+        // Les deux presets de la dictee : texte et apercu en direct.
+        let modules = [SpeechTranscriber(locale: supported, preset: .transcription),
+                       SpeechTranscriber(locale: supported, preset: .progressiveTranscription)]
+        guard let request = try await AssetInventory.assetInstallationRequest(supporting: modules) else { return }
         let observation = request.progress.observe(\.fractionCompleted, options: [.initial, .new]) { p, _ in
             let fraction = p.fractionCompleted
             Task { @MainActor in progress(fraction) }
@@ -83,58 +91,101 @@ final class AppleTranscriber: Transcriber {
     }
 }
 
-/// Session prete : module, analyseur prepare et format d'entree de l'analyseur.
-private struct Session: Sendable {
+/// Analyseur prepare, son module et son format d'entree.
+private struct Stage: Sendable {
     let module: SpeechTranscriber
     let analyzer: SpeechAnalyzer
     let format: AVAudioFormat
 
-    static func make(locale: Locale) async throws -> Session {
-        let resolved = await SpeechTranscriber.supportedLocale(equivalentTo: locale) ?? locale
-        let module = SpeechTranscriber(locale: resolved, preset: .transcription)
+    static func make(locale: Locale, preset: SpeechTranscriber.Preset) async throws -> Stage {
+        let module = SpeechTranscriber(locale: locale, preset: preset)
         let options = SpeechAnalyzer.Options(priority: .userInitiated, modelRetention: .processLifetime)
         let analyzer = SpeechAnalyzer(modules: [module], options: options)
         guard let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [module]) else {
             throw EngineError.noAudioFormat
         }
         try await analyzer.prepareToAnalyze(in: format)
-        return Session(module: module, analyzer: analyzer, format: format)
+        return Stage(module: module, analyzer: analyzer, format: format)
+    }
+}
+
+/// Session prete : l'analyseur du texte (`.transcription`) et, en option, celui de l'apercu.
+private struct Session: Sendable {
+    let main: Stage
+    let live: Stage?
+
+    static func make(locale: Locale, liveText: Bool) async throws -> Session {
+        let resolved = await SpeechTranscriber.supportedLocale(equivalentTo: locale) ?? locale
+        let main = try await Stage.make(locale: resolved, preset: .transcription)
+        // Apercu facultatif : s'il ne se prepare pas, la dictee marche sans.
+        let live = liveText ? try? await Stage.make(locale: resolved, preset: .progressiveTranscription) : nil
+        return Session(main: main, live: live)
     }
 
-    /// Lit `audio` jusqu'a sa fin, finalise, et emet chaque resultat (finals seulement avec ce preset).
+    /// Lit `audio` jusqu'a sa fin, finalise, et emet chaque resultat : les apercus pendant la parole,
+    /// puis les finals du texte.
     func run(audio: AsyncStream<AudioChunk>, emit: @escaping @Sendable (Transcript) -> Void) async throws {
         let (inputs, feed) = AsyncStream<AnalyzerInput>.makeStream()
-        let analyzer = analyzer
-        let module = module
-        let format = format
+        let (liveInputs, liveFeed) = AsyncStream<AnalyzerInput>.makeStream()
+        let main = main
+        let live = live
         try await withTaskCancellationHandler {
-            try await analyzer.start(inputSequence: inputs)
+            try await main.analyzer.start(inputSequence: inputs)
+            var preview: Task<Void, Never>?
+            if let live {
+                try await live.analyzer.start(inputSequence: liveInputs)
+                preview = Task {
+                    do {
+                        for try await result in live.module.results {
+                            emit(Transcript(text: String(result.text.characters), isFinal: result.isFinal,
+                                            isPreview: true))
+                        }
+                    } catch {}
+                }
+            }
+            defer { preview?.cancel() }
             try await withThrowingTaskGroup(of: Void.self) { group in
                 group.addTask {
-                    for try await result in module.results {
+                    for try await result in main.module.results {
                         emit(Transcript(text: String(result.text.characters), isFinal: result.isFinal))
                     }
                 }
                 group.addTask {
                     var converter: PCMConverter?
+                    var liveConverter: PCMConverter?
                     for await chunk in audio {
                         guard let buffer = chunk.pcmBuffer() else { continue }
                         if converter?.input != buffer.format {
-                            converter = PCMConverter(from: buffer.format, to: format)
+                            converter = PCMConverter(from: buffer.format, to: main.format)
                         }
-                        if let converted = converter?.convert(buffer) {
-                            feed.yield(AnalyzerInput(buffer: converted))
+                        let converted = converter?.convert(buffer)
+                        if let converted { feed.yield(AnalyzerInput(buffer: converted)) }
+                        guard let live else { continue }
+                        if live.format == main.format {
+                            if let converted { liveFeed.yield(AnalyzerInput(buffer: converted)) }
+                        } else {
+                            if liveConverter?.input != buffer.format {
+                                liveConverter = PCMConverter(from: buffer.format, to: live.format)
+                            }
+                            if let other = liveConverter?.convert(buffer) { liveFeed.yield(AnalyzerInput(buffer: other)) }
                         }
                     }
                     feed.finish()
+                    // L'apercu s'arrete net : il ne dispute pas la finalisation au texte.
+                    liveFeed.finish()
+                    if let live { Task { await live.analyzer.cancelAndFinishNow() } }
                     try Task.checkCancellation()
-                    try await analyzer.finalizeAndFinishThroughEndOfInput()
+                    try await main.analyzer.finalizeAndFinishThroughEndOfInput()
                 }
                 try await group.waitForAll()
             }
         } onCancel: {
             feed.finish()
-            Task { await analyzer.cancelAndFinishNow() }
+            liveFeed.finish()
+            Task {
+                await main.analyzer.cancelAndFinishNow()
+                await live?.analyzer.cancelAndFinishNow()
+            }
         }
     }
 }
@@ -152,10 +203,14 @@ enum EngineError: LocalizedError {
 /// Garde une session prete d'avance (au plus une).
 private actor SessionPool {
     let locale: Locale
+    let liveText: Bool
     private var next: Session?
     private var making: Task<Session, any Error>?
 
-    init(locale: Locale) { self.locale = locale }
+    init(locale: Locale, liveText: Bool) {
+        self.locale = locale
+        self.liveText = liveText
+    }
 
     /// Session prete, ou creee a la demande (moteur froid).
     func take() async throws -> Session {
@@ -167,7 +222,7 @@ private actor SessionPool {
             self.making = nil
             return try await making.value
         }
-        return try await Session.make(locale: locale)
+        return try await Session.make(locale: locale, liveText: liveText)
     }
 
     func refill() async throws {
@@ -177,7 +232,8 @@ private actor SessionPool {
             return
         }
         let locale = locale
-        let task = Task { try await Session.make(locale: locale) }
+        let liveText = liveText
+        let task = Task { try await Session.make(locale: locale, liveText: liveText) }
         making = task
         let session: Session
         do {

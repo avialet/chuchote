@@ -51,6 +51,24 @@ public enum DictationFormat {
         return number + nbsp + (count > 1 ? "mots" : "mot")
     }
 
+    /// Horodatage d'une ligne : l'heure (<< 09:05 >>) aujourd'hui et hier, la date ensuite
+    /// (<< 8 oct. >>, << 24 dec. 2025 >> une autre annee).
+    public static func stamp(_ date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "fr_FR")
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: now) ?? now
+        if calendar.isDate(date, inSameDayAs: now) || calendar.isDate(date, inSameDayAs: yesterday) {
+            formatter.dateFormat = "HH:mm"
+        } else if calendar.component(.year, from: date) == calendar.component(.year, from: now) {
+            formatter.dateFormat = "d MMM"
+        } else {
+            formatter.dateFormat = "d MMM y"
+        }
+        return formatter.string(from: date)
+    }
+
     /// << Mail · 12 s · 24 mots >> ; sans app cible : << 12 s · 24 mots >>.
     public static func meta(_ dictation: Dictation) -> String {
         var parts: [String] = []

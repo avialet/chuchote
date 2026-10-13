@@ -66,6 +66,15 @@ let historyListTests: (String, [Test]) = ("HistoryList", [
         expectEqual(DictationFormat.meta(blankApp), "3\u{00A0}s \u{00B7} 1\u{00A0}mot")
     },
 
+    Test("horodatage : heure, puis date") {
+        let now = at(13, 15)
+        expectEqual(DictationFormat.stamp(at(13, 9, 5), now: now, calendar: paris), "09:05")
+        expectEqual(DictationFormat.stamp(at(12, 22, 41), now: now, calendar: paris), "22:41")
+        expectEqual(DictationFormat.stamp(at(8, 10), now: now, calendar: paris), "8 oct.")
+        let lastYear = paris.date(from: DateComponents(year: 2025, month: 12, day: 24, hour: 18))!
+        expectEqual(DictationFormat.stamp(lastYear, now: now, calendar: paris), "24 d\u{00E9}c. 2025")
+    },
+
     Test("selection : fleches bornees") {
         let ids: [Int64] = [5, 4, 3]
         expectEqual(ListSelection.move(in: ids, from: nil, by: 1), 5)

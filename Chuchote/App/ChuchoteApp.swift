@@ -22,7 +22,10 @@ struct ChuchoteApp: App {
         .windowStyle(.hiddenTitleBar)
         .windowBackgroundDragBehavior(.enabled)
         .defaultSize(width: 860, height: 560)
-        .commands { AboutCommands(identity: Brand.identity) }
+        .commands {
+            AboutCommands(identity: Brand.identity)
+            UpdateCommands(updater: .shared)
+        }
 
         Settings {
             SettingsView().environment(state)

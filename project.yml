@@ -21,7 +21,7 @@ packages:
   VialetKit:
     url: https://github.com/avialet/vialetkit.git
     # Mineur epingle (0.2.x) : en 0.x, un changement cassant du kit monte le mineur.
-    minorVersion: "0.2.3"
+    minorVersion: "0.2.4"
   ChuchoteCore:
     path: Packages/ChuchoteCore
 targets:

@@ -29,7 +29,7 @@ extension Updater {
 }
 
 extension HotKeyController {
-    /// ⌃⌥Espace : libre dans le portefeuille (⇧⌘ Pico, ⌃⌥⌘ Allege, ⌃⇧ Pince, ⌥⇧ Brouillon) et pour macOS.
+    /// Ctrl-Opt-Espace : libre dans le portefeuille (Shift-Cmd Pico, Ctrl-Opt-Cmd Allege, Ctrl-Shift Pince, Opt-Shift Brouillon) et pour macOS.
     static let shared = HotKeyController(defaultsKey: Brand.key("HotKey"), logName: Brand.displayName,
                                          initial: .space([.control, .option]))
 }

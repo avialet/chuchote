@@ -7,4 +7,5 @@ run([
     polishTests,
     levelMeterTests,
     dictationStoreTests,
+    blobGeometryTests,
 ])

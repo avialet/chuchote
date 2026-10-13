@@ -65,3 +65,25 @@ func run(_ suites: [(String, [Test])]) -> Never {
     print("\(passed) passed, \(failed) failed")
     exit(failed == 0 ? 0 : 1)
 }
+
+/// Resultat partage entre la tache asynchrone et le fil de test (protege par le semaphore).
+private final class ResultBox<T>: @unchecked Sendable {
+    var result: Result<T, any Error>?
+}
+
+/// Execute un corps asynchrone et attend son resultat (tests synchrones du harnais).
+/// Echoue au-dela de `timeout` secondes.
+func blocking<T: Sendable>(timeout: TimeInterval = 5,
+                           _ body: @escaping @Sendable () async throws -> T) throws -> T {
+    let semaphore = DispatchSemaphore(value: 0)
+    let box = ResultBox<T>()
+    let task = Task {
+        do { box.result = .success(try await body()) } catch { box.result = .failure(error) }
+        semaphore.signal()
+    }
+    if semaphore.wait(timeout: .now() + timeout) == .timedOut {
+        task.cancel()
+        throw TestFailure(description: "timeout after \(timeout) s")
+    }
+    return try box.result!.get()
+}

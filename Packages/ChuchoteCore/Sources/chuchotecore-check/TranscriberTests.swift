@@ -144,6 +144,26 @@ let transcriberTests: (String, [Test]) = ("Transcriber", [
         ])
         expectEqual(FakeTranscriber.progressive("   ").script, [Transcript(text: "", isFinal: true)])
     },
+    Test("bufferJoinsFinalsAndKeepsLastPartial") {
+        var buffer = TranscriptBuffer()
+        expectEqual(buffer.text, "")
+        buffer.add(Transcript(text: "bonjour", isFinal: false))
+        expectEqual(buffer.text, "bonjour")
+        buffer.add(Transcript(text: "Bonjour Claire,", isFinal: true))
+        buffer.add(Transcript(text: "a", isFinal: false))
+        buffer.add(Transcript(text: "a demain", isFinal: false))
+        // Un partiel remplace le precedent ; il suit les finals tant qu'aucun final ne le remplace.
+        expectEqual(buffer.text, "Bonjour Claire, a demain")
+        buffer.add(Transcript(text: " A demain. ", isFinal: true))
+        expectEqual(buffer.text, "Bonjour Claire, A demain.")
+    },
+    Test("bufferIgnoresBlankSegments") {
+        var buffer = TranscriptBuffer()
+        buffer.add(Transcript(text: "  ", isFinal: true))
+        buffer.add(Transcript(text: "oui", isFinal: true))
+        buffer.add(Transcript(text: "", isFinal: false))
+        expectEqual(buffer.text, "oui")
+    },
     Test("fakeEmptyScriptFinishesWithAudio") {
         let fake = FakeTranscriber(script: [])
         let got = try blocking { try await collect(fake.transcribe(finishedAudio())) }

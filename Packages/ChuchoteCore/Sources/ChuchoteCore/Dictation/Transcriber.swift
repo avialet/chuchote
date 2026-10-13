@@ -29,6 +29,30 @@ public struct Transcript: Sendable, Equatable {
     }
 }
 
+/// Texte d'une dictee au fil des transcriptions : les finals bout a bout, puis le dernier
+/// partiel (qui remplace le precedent) tant qu'aucun final ne l'a remplace. Segments vides ignores,
+/// blancs de bord retires ; la mise au propre reste a `Polish`.
+public struct TranscriptBuffer: Sendable, Equatable {
+    private var finals: [String] = []
+    private var partial = ""
+
+    public init() {}
+
+    public mutating func add(_ transcript: Transcript) {
+        let text = transcript.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if transcript.isFinal {
+            if !text.isEmpty { finals.append(text) }
+            partial = ""
+        } else {
+            partial = text
+        }
+    }
+
+    public var text: String {
+        (partial.isEmpty ? finals : finals + [partial]).joined(separator: " ")
+    }
+}
+
 /// Moteur de reconnaissance. Il lit l'audio jusqu'a la fin du flux (fin de
 /// l'ecoute), emet des partiels au fil de l'eau puis ses finals, et termine son
 /// flux apres le dernier final. La langue se choisit a la construction du moteur.

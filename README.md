@@ -14,10 +14,8 @@
 
 ## Ce que fait Chuchote
 
-<!-- a adapter : trois idees, une phrase chacune -->
-
-- **Première idée.** Une phrase.
-- **Deuxième idée.** Une phrase.
+- **Maintenir, parler, relâcher.** Le texte s’écrit là où se trouve le curseur, dans n’importe quelle app.
+- **Rapide et sur votre Mac.** La reconnaissance vocale de macOS tourne en local : rien n’est envoyé.
 - **Rester chez vous.** Tout est stocké sur votre Mac. Aucun compte, aucun serveur, aucune télémétrie.
 
 ## Installation
@@ -51,14 +49,31 @@ installée n'est pas touchée. La recherche automatique se désactive dans **Ré
 
 Le seul échange réseau de Chuchote est cette lecture de la version publiée. Aucune donnée n'est envoyée.
 
-## Notice
+## Utilisation
 
-<!-- a adapter -->
+- **Maintenir pour dicter.** Tenez **⌃⌥Espace** (modifiable dans les Réglages), parlez, relâchez :
+  le texte est mis au propre (majuscule, ponctuation, typographie française) puis collé dans l’app
+  active. Il reste aussi dans le presse-papiers.
+- **Appui bref : écoute verrouillée.** Un appui court lance l’écoute sans tenir la touche ; un second
+  appui termine et colle. **Échap** annule à tout moment, sans rien écrire.
+- **Historique.** La fenêtre (Dock, ou **Historique** dans la barre des menus) garde les dernières
+  dictées, cherchables. **↩** ou un double-clic recopie une dictée, **⌘⌫** la supprime.
+- Fermer la fenêtre ne quitte pas l’app : le raccourci et l’icône de la barre des menus restent actifs.
+  **⌘Q** quitte vraiment. Le lien `chuchote://` ouvre la fenêtre principale.
 
-- **Raccourci global** (⌃⌥Espace par défaut, modifiable dans les Réglages) : maintenir pour dicter, appui bref pour une écoute verrouillée ; le texte est collé dans l’app active et reste dans le presse-papiers.
-- Fermer la fenêtre ne quitte pas l'app : le raccourci et l'icône de la barre des menus restent actifs. **⌘Q** quitte vraiment.
-- Le lien `chuchote://` ouvre la fenêtre principale.
-- **À propos de Chuchote** (menu de l'app ou de la barre des menus) : version, licence MIT, liens vers le site et le code source.
+### Autorisations
+
+Tant qu’un point manque, une carte en tête de la fenêtre l’indique, avec le bouton qui le règle.
+
+- **Micro** : demandé à la première dictée. Chuchote n’écoute que pendant que vous dictez
+  (l’indicateur orange de macOS s’allume alors, et seulement alors).
+- **Accessibilité** (Réglages Système › Confidentialité et sécurité › Accessibilité) : nécessaire au
+  collage direct, qui simule ⌘V dans l’app active. Sans elle, le texte attend dans le presse-papiers.
+- **Langue** : si le modèle de dictée de la langue choisie n’est pas encore sur le Mac, macOS le
+  télécharge une fois, depuis les serveurs d’Apple (bouton **Installer**).
+
+Chaque version porte une nouvelle signature ad hoc : après une mise à jour, si le collage direct ne
+fonctionne plus, retirez puis rajoutez Chuchote dans la liste Accessibilité.
 
 ### Vos données
 
@@ -103,8 +118,9 @@ les utilisateurs reçoivent la mise à jour dans l'app.
 
 ## Confidentialité
 
-Chuchote ne collecte rien. Vos données ne quittent jamais votre Mac. La seule requête
-réseau est la lecture de la dernière version publiée sur GitHub, que vous pouvez désactiver.
+Chuchote ne collecte rien. Votre voix et vos dictées ne quittent jamais votre Mac. La seule
+requête réseau de l’app est la lecture de la dernière version publiée sur GitHub, que vous pouvez
+désactiver ; le modèle d’une langue est téléchargé par macOS lui-même, une fois.
 
 ## Licence
 

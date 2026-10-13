@@ -8,4 +8,6 @@ run([
     levelMeterTests,
     dictationStoreTests,
     blobGeometryTests,
+    historyListTests,
+    setupTests,
 ])

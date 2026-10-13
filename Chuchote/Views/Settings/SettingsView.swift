@@ -5,11 +5,10 @@ import VialetKit
 /// Reglages : les quatre cartes standard du kit, puis << Dictee >> et << Historique >>.
 struct SettingsView: View {
     @Environment(AppState.self) private var state
-    @AppStorage(Brand.key("MenuBar")) private var menuBarVisible = true
 
     var body: some View {
         SettingsScreen(app: Brand.identity, hotKey: HotKeyController.shared, updater: Updater.shared,
-                       menuBarVisible: $menuBarVisible,
+                       menuBar: MenuBarPresence.shared,
                        hotKeyHint: "Maintenir pour dicter, appui bref pour une \u{00E9}coute verrouill\u{00E9}e.",
                        width: 480) {
             DictationCard()

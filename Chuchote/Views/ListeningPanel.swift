@@ -1,7 +1,7 @@
 import SwiftUI
 import VialetKit
 
-/// Contenu du panneau d'ecoute : pilule `PanelCard` 360 x 76 (marge d'ombre autour), blob a gauche,
+/// Contenu du panneau d'ecoute : pilule `PanelCard` 360 x 76 (marge d'ombre autour), blob de 48 pt a gauche,
 /// marque et etat au centre, touches d'aide a droite (<< esc annuler >> est aussi un bouton).
 struct ListeningPanel: View {
     let controller: DictationController
@@ -10,7 +10,7 @@ struct ListeningPanel: View {
         PanelCard {
             HStack(spacing: Theme.Space.m) {
                 Blob(level: controller.level, mode: blobMode, fixedTime: controller.fixedBlobTime)
-                    .frame(width: 44, height: 44)
+                    .frame(width: 48, height: 48)
                 VStack(alignment: .leading, spacing: 2) {
                     Wordmark.Mini(Brand.displayName)
                     status
@@ -27,7 +27,8 @@ struct ListeningPanel: View {
     private var blobMode: Blob.Mode {
         switch controller.phase {
         case .writing: .writing
-        case .done, .failed: .frozen
+        case .done: .pasted
+        case .failed: .frozen
         case .idle, .listening: .listening
         }
     }

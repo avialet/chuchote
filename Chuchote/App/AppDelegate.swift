@@ -57,6 +57,11 @@ extension AppDelegate {
                 await dictation.snapshotWriting()
                 return panel()
             },
+            SnapshotScenario("blob-niveaux") {
+                let window = BlobBoard.window()
+                try await Task.sleep(for: .milliseconds(400))
+                return window
+            },
         ]
         return SnapshotRunner.runIfRequested(prefix: Brand.name, scenarios: standard + panels)
     }

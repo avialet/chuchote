@@ -1,16 +1,21 @@
+import ChuchoteCore
 import SwiftUI
 import VialetKit
 
-/// Blob de l'ecoute : trois couches (halo pale, corps accent, coeur deep a faible opacite), contour
-/// ferme deforme par trois sinusoides lentes dont l'amplitude suit le niveau de la voix. En ecriture
-/// il se resserre et respire ; fige, il garde sa pose. Reduire les animations : un cercle qui pulse.
+/// Blob de l'ecoute : une seule forme organique lisse (BlobGeometry) remplie d'un degrade radial
+/// accent -> deep (nuit en sombre) eclaire en haut a gauche, et un halo concentrique de la meme forme
+/// dont l'echelle suit la voix. Le coeur bouge peu ; c'est le halo qui respire. Aucun trait.
 struct Blob: View {
     enum Mode: Equatable {
-        /// Ecoute : amplitude = niveau.
+        /// Repos de la fenetre (etat vide) : derive lente, halo discret qui respire.
+        case calm
+        /// Ecoute : le halo suit le niveau.
         case listening
-        /// Transcription : resserre, respiration lente.
+        /// Transcription : halo replie, le coeur pulse doucement.
         case writing
-        /// Pose figee (<< Colle >>).
+        /// Texte livre : halo bref, puis la forme se fige.
+        case pasted
+        /// Pose figee (erreur).
         case frozen
     }
 
@@ -21,87 +26,118 @@ struct Blob: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
-    @State private var frozenTime: Double?
+    /// Instant de la forme figee (collage, erreur).
+    @State private var frozenAt: Double?
+
+    /// Rayon du coeur rapporte a la demi-largeur du cadre : laisse la place au halo le plus grand.
+    static let coreFraction: Double = 1 / (BlobGeometry.haloScale(level: 1) * BlobGeometry.coreScale(level: 1)
+        * (1 + BlobGeometry.maxDeviation * BlobGeometry.intensity(level: 1)))
+
+    /// Repos : 30 images par seconde suffisent a une derive lente.
+    private var frameInterval: Double { mode == .calm ? 1.0 / 30 : 1.0 / 60 }
 
     var body: some View {
         Group {
-            if let time = fixedTime ?? frozenTime {
-                canvas(time: time)
+            if let fixedTime {
+                canvas(time: fixedTime)
             } else {
-                TimelineView(.animation(minimumInterval: 1.0 / 60, paused: mode == .frozen)) { context in
+                TimelineView(.animation(minimumInterval: frameInterval, paused: mode == .frozen)) { context in
                     canvas(time: context.date.timeIntervalSinceReferenceDate)
                 }
             }
         }
-        .onChange(of: mode, initial: true) { _, mode in
-            frozenTime = mode == .frozen ? (frozenTime ?? Date.timeIntervalSinceReferenceDate) : nil
-        }
+        .onChange(of: mode, initial: true) { _, mode in freeze(mode) }
         .accessibilityHidden(true)
+    }
+
+    private func freeze(_ mode: Mode) {
+        let still = mode == .pasted || mode == .frozen
+        frozenAt = still ? Date.timeIntervalSinceReferenceDate : nil
     }
 
     private func canvas(time: Double) -> some View {
         let palette = Palette(dark: colorScheme == .dark)
-        let level = min(max(level, 0), 1)
-        let mode = mode
-        let reduceMotion = reduceMotion
+        let pose = Self.pose(mode: mode, level: min(max(level, 0), 1), time: time, frozenAt: frozenAt,
+                             reduceMotion: reduceMotion)
         return Canvas { context, size in
-            let center = CGPoint(x: size.width / 2, y: size.height / 2)
-            let half = min(size.width, size.height) / 2
-            let body = half * 0.62
-            if reduceMotion {
-                Self.drawCircles(in: &context, center: center, body: body, level: level, mode: mode,
-                                 time: time, palette: palette)
-                return
-            }
-            let shape = Self.shape(mode: mode, level: level, time: time)
-            // Halo
-            context.fill(Self.outline(center: center, radius: body * shape.haloScale, amplitude: shape.haloAmplitude,
-                                      time: time, phase: 1.9),
-                         with: .color(palette.halo))
-            // Corps
-            context.fill(Self.outline(center: center, radius: body * shape.scale, amplitude: shape.amplitude,
-                                      time: time, phase: 0),
-                         with: .color(palette.body))
-            // Coeur, legerement decale vers le bas : du relief sans reflet
-            let offset = body * shape.scale * 0.12
-            context.fill(Self.outline(center: CGPoint(x: center.x + offset * 0.5, y: center.y + offset),
-                                      radius: body * shape.scale * 0.55, amplitude: shape.amplitude * 1.3,
-                                      time: time * 1.15, phase: 3.7),
-                         with: .color(palette.core))
+            Self.draw(in: &context, size: size, pose: pose, palette: palette)
         }
+    }
+
+    private static func draw(in context: inout GraphicsContext, size: CGSize, pose: Pose, palette: Palette) {
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let radius: Double = min(size.width, size.height) / 2 * coreFraction * pose.coreScale
+        if pose.haloOpacity > 0.001 && pose.haloScale > 1.001 {
+            let halo = outline(center: center, radius: radius * pose.haloScale, time: pose.shapeTime,
+                               intensity: pose.intensity)
+            context.fill(halo, with: .color(palette.halo.opacity(pose.haloOpacity)))
+        }
+        // Lumiere en haut a gauche : du volume sans reflet.
+        let light = CGPoint(x: center.x - 0.32 * radius, y: center.y - 0.38 * radius)
+        let core = outline(center: center, radius: radius, time: pose.shapeTime, intensity: pose.intensity)
+        let shading = GraphicsContext.Shading.radialGradient(palette.core, center: light, startRadius: 0,
+                                                             endRadius: radius * 2.3)
+        context.fill(core, with: shading)
+    }
+
+    // MARK: - Pose
+
+    private struct Pose {
+        var shapeTime: Double
+        var intensity: Double
+        var coreScale: Double
+        var haloScale: Double
+        var haloOpacity: Double
+    }
+
+    private static func pose(mode: Mode, level: Double, time: Double, frozenAt: Double?,
+                             reduceMotion: Bool) -> Pose {
+        let shapeTime = reduceMotion ? 0 : (frozenAt ?? time)
+        var pose = Pose(shapeTime: shapeTime, intensity: BlobGeometry.intensity(level: level),
+                        coreScale: 1, haloScale: 1, haloOpacity: 1)
+        if reduceMotion {
+            // Coeur fixe, halo en fondu a echelle fixe.
+            pose.intensity = BlobGeometry.intensity(level: 0)
+            pose.haloScale = BlobGeometry.haloScale(level: 0.7)
+            switch mode {
+            case .listening: pose.haloOpacity = level
+            case .pasted: pose.haloOpacity = BlobGeometry.pastedFlash(elapsed: time - (frozenAt ?? time)).opacity
+            case .calm, .writing, .frozen: pose.haloOpacity = 0
+            }
+            return pose
+        }
+        switch mode {
+        case .calm:
+            pose.intensity = BlobGeometry.intensity(level: 0)
+            let breath: Double = sin(2 * Double.pi * time / 5)
+            pose.haloScale = BlobGeometry.haloScale(level: 0.22 + 0.1 * breath)
+        case .listening:
+            pose.coreScale = BlobGeometry.coreScale(level: level)
+            pose.haloScale = BlobGeometry.haloScale(level: level)
+            // Halo a peine ouvert : attenue, pour ne pas lire un anneau.
+            pose.haloOpacity = 0.45 + 0.55 * level
+        case .writing:
+            pose.intensity = BlobGeometry.intensity(level: 0)
+            pose.coreScale = BlobGeometry.writingPulse(time: time)
+        case .pasted:
+            let flash = BlobGeometry.pastedFlash(elapsed: time - (frozenAt ?? time))
+            pose.intensity = BlobGeometry.intensity(level: 0)
+            pose.haloScale = flash.scale
+            pose.haloOpacity = flash.opacity
+        case .frozen:
+            pose.intensity = BlobGeometry.intensity(level: 0)
+        }
+        return pose
     }
 
     // MARK: - Forme
 
-    private struct Shape {
-        var scale: Double
-        var amplitude: Double
-        var haloScale: Double
-        var haloAmplitude: Double
-    }
-
-    private static func shape(mode: Mode, level: Double, time: Double) -> Shape {
-        switch mode {
-        case .listening, .frozen:
-            return Shape(scale: 0.92 + 0.08 * level, amplitude: 0.04 + 0.15 * level,
-                         haloScale: 1.1 + 0.22 * level, haloAmplitude: 0.06 + 0.2 * level)
-        case .writing:
-            let breath = sin(time * 2 * .pi / 1.6)
-            return Shape(scale: 0.8 + 0.05 * breath, amplitude: 0.035,
-                         haloScale: 1.02 + 0.08 * breath, haloAmplitude: 0.05)
-        }
-    }
-
-    /// Contour ferme : rayon module par trois sinusoides lentes, lisse par des courbes quadratiques.
-    private static func outline(center: CGPoint, radius: Double, amplitude: Double, time: Double,
-                                phase: Double) -> Path {
-        let count = 72
+    /// Contour ferme de BlobGeometry, lisse par des courbes quadratiques entre les milieux.
+    private static func outline(center: CGPoint, radius: Double, time: Double, intensity: Double) -> Path {
+        let count = 96
         let points: [CGPoint] = (0..<count).map { i in
             let angle = Double(i) / Double(count) * 2 * .pi
-            let wobble = 0.55 * sin(3 * angle + 0.9 * time + phase)
-                + 0.3 * sin(5 * angle - 1.3 * time + 2 * phase)
-                + 0.15 * sin(2 * angle + 0.6 * time + 1.7)
-            let r = radius * (1 + amplitude * wobble)
+            let r = radius * BlobGeometry.radius(angle: angle, time: time, intensity: intensity)
             return CGPoint(x: center.x + r * cos(angle), y: center.y + r * sin(angle))
         }
         func mid(_ a: CGPoint, _ b: CGPoint) -> CGPoint { CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2) }
@@ -114,34 +150,20 @@ struct Blob: View {
         return path
     }
 
-    /// Reduire les animations : cercles concentriques dont la taille suit le niveau (ou respire en ecriture).
-    private static func drawCircles(in context: inout GraphicsContext, center: CGPoint, body: Double,
-                                    level: Double, mode: Mode, time: Double, palette: Palette) {
-        let pulse: Double
-        switch mode {
-        case .listening, .frozen: pulse = level
-        case .writing: pulse = 0.25 + 0.25 * sin(time * 2 * .pi / 1.6)
-        }
-        func circle(_ r: Double) -> Path {
-            Path(ellipseIn: CGRect(x: center.x - r, y: center.y - r, width: 2 * r, height: 2 * r))
-        }
-        context.fill(circle(body * (1.1 + 0.25 * pulse)), with: .color(palette.halo))
-        context.fill(circle(body * (0.88 + 0.12 * pulse)), with: .color(palette.body))
-    }
-
     // MARK: - Teintes
 
-    /// Clair : halo pale, corps accent, coeur deep a faible opacite.
-    /// Sombre (teintes de nuit) : halo accent attenue, corps accent, coeur nightInk a faible opacite.
+    /// Clair : coeur accent -> deep, halo pale. Sombre : coeur accent -> nuit, halo accent a 30 % (nightInk a 30 % grisait le halo en anneau terne).
     private struct Palette {
+        let core: Gradient
         let halo: Color
-        let body: Color
-        let core: Color
 
         @MainActor init(dark: Bool) {
+            let edge = dark ? Theme.accentNight : Theme.accentDeep
+            core = Gradient(stops: [
+                .init(color: Theme.accent, location: 0.25),
+                .init(color: edge, location: 1),
+            ])
             halo = dark ? Theme.accent.opacity(0.3) : Theme.accentPale
-            body = Theme.accent
-            core = dark ? Theme.accentNightInk.opacity(0.28) : Theme.accentDeep.opacity(0.22)
         }
     }
 }

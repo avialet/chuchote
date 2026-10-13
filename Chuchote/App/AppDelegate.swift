@@ -1,4 +1,5 @@
 import AppKit
+import ChuchoteCore
 import VialetKit
 
 @MainActor
@@ -35,11 +36,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 /// [-ChuchoteSnapshotSeed 1] [-ChuchoteSnapshotAppearance dark] [-ChuchoteSnapshotOnly a,b]
 /// [-ChuchoteSnapshotSize 1000x720]`, avec CHUCHOTE_DB_PATH vers une base jetable. Ecrit
 /// `mainWindow`, `settings`, `about`, `listening` et `writing` (panneau d'ecoute, moteur factice et
-/// niveau fige) (`-sombre` en sombre) dans le dossier, puis quitte.
+/// niveau fige), `blob-niveaux` (planche du blob), `empty` (historique vide) et `welcome` (carte
+/// d'accueil, historique vide) (`-sombre` en sombre) dans le dossier, puis quitte. Autorisations et
+/// langue figees : tout en ordre, sauf pour `welcome`.
 extension AppDelegate {
     func runSnapshotIfRequested() -> Bool {
         guard SnapshotRequest.parse(prefix: Brand.name, arguments: CommandLine.arguments) != nil else { return false }
-        if UserDefaults.standard.bool(forKey: Brand.key("SnapshotSeed")) { seed() }
+        let state = AppState.shared
+        let locales = ["fr_FR", "en_US", "en_GB", "de_DE", "es_ES", "it_IT"]
+        state.freezeSetup(microphone: .authorized, accessibilityTrusted: true, language: .ready, locales: locales)
+        if UserDefaults.standard.bool(forKey: Brand.key("SnapshotSeed")) { seed(into: state.store) }
+        state.reload()
         let standard = SnapshotRunner.standardScenarios(mainWindow: { WindowSummoner.mainWindow }, identity: Brand.identity)
         let dictation = DictationController.snapshot()
         func panel() -> NSWindow? { NSApp.windows.first { $0 is FloatingPanel && $0.isVisible } }
@@ -62,12 +69,41 @@ extension AppDelegate {
                 try await Task.sleep(for: .milliseconds(400))
                 return window
             },
+            SnapshotScenario("empty") {
+                state.clearHistory()
+                try await Task.sleep(for: .milliseconds(600))
+                return WindowSummoner.mainWindow
+            },
+            SnapshotScenario("welcome") {
+                state.clearHistory()
+                state.freezeSetup(microphone: .notDetermined, accessibilityTrusted: false,
+                                  language: .installing(0.62), locales: locales)
+                try await Task.sleep(for: .milliseconds(600))
+                return WindowSummoner.mainWindow
+            },
         ]
         return SnapshotRunner.runIfRequested(prefix: Brand.name, scenarios: standard + panels)
     }
 
-    /// Exemples neutres pour les captures, sans donnee personnelle (chaines en echappements ASCII).
-    private func seed() {
+    /// Huit dictees fictives et neutres sur deux semaines, sans donnee personnelle (chaines en
+    /// echappements ASCII), mises au propre par Polish comme une vraie dictee.
+    private func seed(into store: DictationStore) {
+        let now = Date()
+        let samples: [(ago: TimeInterval, text: String, duration: TimeInterval, app: String, locale: String)] = [
+            (40, "pense \u{00E0} rappeler le garage avant midi pour le contr\u{00F4}le technique", 4.2, "Rappels", "fr_FR"),
+            (25 * 60, "bonjour Claire, je te confirme notre rendez-vous de jeudi \u{00E0} 10 h 30. Peux-tu apporter le dossier du projet et les chiffres du trimestre ? Merci et \u{00E0} bient\u{00F4}t", 9.5, "Mail", "fr_FR"),
+            (3 * 3600, "id\u{00E9}es pour l'atelier : commencer par un tour de table, garder vingt minutes pour les questions, envoyer le compte rendu le soir m\u{00EA}me", 11.2, "Notes", "fr_FR"),
+            (26 * 3600, "hi Tom, thanks for the quick reply. Friday works for me, let's meet at the station caf\u{00E9} at nine", 7.8, "Mail", "en_US"),
+            (29 * 3600, "liste de courses : farine, \u{0153}ufs, citrons, un bouquet de basilic et du caf\u{00E9} en grains", 6.3, "Rappels", "fr_FR"),
+            (3 * 86400, "compte rendu de la r\u{00E9}union d'\u{00E9}quipe : le planning de novembre est valid\u{00E9}, la mise en ligne du nouveau site est repouss\u{00E9}e d'une semaine pour finir les tests, et chacun relit la documentation avant vendredi. Prochaine r\u{00E9}union mardi \u{00E0} 9 h, m\u{00EA}me salle, avec les maquettes imprim\u{00E9}es et la liste des questions ouvertes", 24.6, "Pages", "fr_FR"),
+            (5 * 86400, "r\u{00E9}server une table pour quatre samedi soir, de pr\u{00E9}f\u{00E9}rence en terrasse", 4.4, "Messages", "fr_FR"),
+            (12 * 86400, "penser \u{00E0} sauvegarder les photos de vacances sur le disque externe", 5.0, "Notes", "fr_FR"),
+        ]
+        for sample in samples.reversed() {
+            let text = Polish.apply(sample.text, locale: sample.locale, frenchTypography: true)
+            _ = try? store.insert(Dictation(text: text, createdAt: now.addingTimeInterval(-sample.ago),
+                                            duration: sample.duration, locale: sample.locale, targetApp: sample.app))
+        }
     }
 }
 #endif

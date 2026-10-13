@@ -109,8 +109,10 @@ struct Blob: View {
         switch mode {
         case .calm:
             pose.intensity = BlobGeometry.intensity(level: 0)
+            // Halo large et attenue qui respire lentement : une lueur, pas un anneau.
             let breath: Double = sin(2 * Double.pi * time / 5)
-            pose.haloScale = BlobGeometry.haloScale(level: 0.22 + 0.1 * breath)
+            pose.haloScale = BlobGeometry.haloScale(level: 0.55 + 0.15 * breath)
+            pose.haloOpacity = 0.5
         case .listening:
             pose.coreScale = BlobGeometry.coreScale(level: level)
             pose.haloScale = BlobGeometry.haloScale(level: level)

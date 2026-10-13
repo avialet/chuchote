@@ -9,7 +9,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Mode capture et essai du moteur : ni raccourci global, ni micro, ni reseau.
         if runSnapshotIfRequested() || EngineCheck.runIfRequested() || FlowCheck.runIfRequested()
             || ClickCheck.runIfRequested() { return }
+        if writeHubManifestIfRequested() { return }
         #endif
+        AppActions.shared.publish()
         // Le raccourci dicte ; la fenetre principale s'ouvre par le menu et le Dock.
         DictationController.shared.start()
         // Laisse l'app s'afficher avant le moindre appel reseau.
@@ -18,9 +20,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Liens `chuchote://` : ouvre la fenetre principale.
+    /// Liens `chuchote://` : `chuchote://dicter` lance une ecoute verrouillee, `chuchote://update` verifie
+    /// les mises a jour ; le reste ouvre la fenetre principale.
     func application(_ application: NSApplication, open urls: [URL]) {
-        WindowSummoner.show()
+        for url in urls where !AppActions.shared.handle(url) { WindowSummoner.show() }
     }
 
     /// L'app reste disponible (raccourci global, barre des menus) fenetre fermee.
@@ -33,6 +36,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 #if DEBUG
+extension AppDelegate {
+    /// `Chuchote -ChuchoteHubManifest <dossier>` : ecrit la fiche pour Vialet dans le dossier (sans la
+    /// condition du dossier Applications, sans prevenir Vialet), imprime son chemin et quitte.
+    func writeHubManifestIfRequested() -> Bool {
+        guard let path = UserDefaults.standard.string(forKey: Brand.key("HubManifest")) else { return false }
+        let directory = URL(fileURLWithPath: path, isDirectory: true)
+        do {
+            try AppActions.shared.manifest().write(to: directory)
+            print("fiche : \(HubManifest.fileURL(bundleIdentifier: Brand.identity.bundleIdentifier, in: directory).path)")
+        } catch {
+            print("fiche non ecrite : \(error)")
+        }
+        exit(0)
+    }
+}
+
 /// Mode capture sans ecran (voir SnapshotRunner) : `Chuchote -ChuchoteSnapshot <dossier>
 /// [-ChuchoteSnapshotSeed 1] [-ChuchoteSnapshotAppearance dark] [-ChuchoteSnapshotOnly a,b]
 /// [-ChuchoteSnapshotSize 1000x720]`, avec CHUCHOTE_DB_PATH vers une base jetable. Ecrit

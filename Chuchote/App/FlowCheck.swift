@@ -3,7 +3,7 @@ import AppKit
 import ChuchoteCore
 
 /// Essai du deroule de la dictee sans micro ni collage (DEBUG) : `Chuchote -ChuchoteFlowCheck`.
-/// Joue le controleur avec une source figee et FakeTranscriber : maintien, verrouillage, annulation
+/// Joue le controleur avec une source figee et FakeTranscriber : maintien, verrouillage, action rapide, annulation
 /// pendant l'ecriture, dictee vide, delai maximal. Imprime chaque verification, puis quitte (1 si echec).
 @MainActor
 enum FlowCheck {
@@ -55,6 +55,16 @@ enum FlowCheck {
         c.toggleLockedDictation()
         await wait(200)
         check(c.lastText == "Note pour demain.", "verrouillage : texte (\(c.lastText ?? "nil"))")
+
+        // Action rapide de Vialet (`chuchote://dicter`) : ecoute verrouillee, un second appel la finit.
+        c = controller(.progressive("action rapide"))
+        await QuickDictation.toggle(c)
+        await wait(100)
+        check(c.isLocked && c.phase != .idle, "action rapide : ecoute verrouillee (\(c.phase))")
+        await QuickDictation.toggle(c)
+        await wait(200)
+        check(c.lastText == "Action rapide.", "action rapide : texte (\(c.lastText ?? "nil"))")
+        await wait(2_000)
 
         // Annulation pendant l'ecriture : rien n'est ecrit, meme quand le moteur finit plus tard.
         c = controller(.progressive("ne pas ecrire", delay: .milliseconds(400)))

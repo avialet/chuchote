@@ -73,15 +73,21 @@ final class DropPanelController {
             window.orderFrontRegardless()
         }
         startTrackingPointer()
-        // Un tour de boucle : la vue part de l'encoche avant de s'ouvrir.
+        // Un tour de boucle : la vue part de l'encoche avant de s'ouvrir. Un `hide()` (ou un nouvel
+        // affichage) entre-temps l'emporte.
+        let token = openCount
         DispatchQueue.main.async { [weak self] in
-            MainActor.assumeIsolated { self?.expanded = true }
+            MainActor.assumeIsolated {
+                guard let self, self.openCount == token, self.window?.isVisible == true else { return }
+                self.expanded = true
+            }
         }
     }
 
     /// La goutte remonte dans l'encoche, puis la fenetre se retire ; un `show()` entre-temps l'emporte.
     func hide() {
         guard let window, window.isVisible else { return }
+        openCount += 1
         let token = openCount
         expanded = false
         DispatchQueue.main.asyncAfter(deadline: .now() + DropView.closeDuration) { [weak self] in
@@ -111,7 +117,18 @@ final class DropPanelController {
 
     private func startTrackingPointer() {
         updatePointer()
-        guard pointerMonitors.isEmpty else { return }
+        if pointerMonitors.isEmpty { installPointerMonitors() }
+        // Secours si un deplacement echappe aux moniteurs (app active sans fenetre qui suit la souris).
+        // Jamais deux releves.
+        guard pointerTimer == nil else { return }
+        let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updatePointer() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        pointerTimer = timer
+    }
+
+    private func installPointerMonitors() {
         let moves: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged]
         if let global = NSEvent.addGlobalMonitorForEvents(matching: moves, handler: { [weak self] _ in
             MainActor.assumeIsolated { self?.updatePointer() }
@@ -124,12 +141,6 @@ final class DropPanelController {
         }) {
             pointerMonitors.append(local)
         }
-        // Secours si un deplacement echappe aux moniteurs (app active sans fenetre qui suit la souris).
-        let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.updatePointer() }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        pointerTimer = timer
     }
 
     private func stopTrackingPointer() {

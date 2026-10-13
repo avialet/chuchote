@@ -25,7 +25,7 @@ enum FlowCheck {
     }
 
     private static func controller(_ fake: FakeTranscriber) -> DictationController {
-        DictationController(audio: FrozenAudio(level: 0.5), makeTranscriber: { _ in fake },
+        DictationController(audio: FrozenAudio(level: 0.5), makeTranscriber: { _, _ in fake },
                             store: nil, deliversText: false)
     }
 

@@ -35,6 +35,10 @@ final class DictationController {
         static let keepHistory = Brand.key("KeepHistory")
         /// Nombre de dictees conservees (`HistoryLimit.rawValue`, 0 : toutes).
         static let historyLimit = Brand.key("HistoryLimit")
+        /// Affichage pendant la dictee (`ListeningStyle.rawValue`) : goutte d'encoche ou pilule en bas.
+        static let listeningStyle = Brand.key("ListeningStyle")
+        /// Texte en direct dans la goutte.
+        static let liveText = Brand.key("LiveText")
     }
 
     nonisolated static let defaultLocale = "fr_FR"
@@ -49,7 +53,7 @@ final class DictationController {
     static let shadowMargin: CGFloat = 32
 
     static let shared = DictationController(audio: Microphone(),
-                                            makeTranscriber: { AppleTranscriber(locale: $0) },
+                                            makeTranscriber: { AppleTranscriber(locale: $0, liveText: $1) },
                                             store: DictationStore(database: AppState.shared.database),
                                             deliversText: true)
 
@@ -65,17 +69,29 @@ final class DictationController {
     private(set) var lastLatency: Duration?
     /// Dernier texte ecrit (apres Polish).
     private(set) var lastText: String?
+    /// Texte montre dans la goutte : l'apercu pendant la parole, puis le texte ecrit.
+    private(set) var liveText = ""
+    /// Affichage de la dictee en cours (lu au debut de chaque dictee).
+    private(set) var style: ListeningStyle = .defaultValue
+    /// La goutte montre le texte en direct (lu au debut de chaque dictee).
+    private(set) var showsLiveText = true
     /// Mode capture : pose figee du blob (secondes) ; nil : anime.
     var fixedBlobTime: Double?
 
     @ObservationIgnored private var gesture = HotKeyGesture()
     @ObservationIgnored private let audio: any AudioSource
-    @ObservationIgnored private let makeTranscriber: (Locale) -> any Transcriber
+    /// Moteur pour une langue, avec ou sans apercu en direct.
+    @ObservationIgnored private let makeTranscriber: (Locale, Bool) -> any Transcriber
     @ObservationIgnored private var transcriber: (any Transcriber)?
     @ObservationIgnored private var transcriberLocale: Locale?
+    @ObservationIgnored private var transcriberLive = false
     @ObservationIgnored private let store: DictationStore?
     @ObservationIgnored private let deliversText: Bool
     @ObservationIgnored private var panel: FloatingPanelController<ListeningPanel>?
+    @ObservationIgnored private var drop: DropPanelController?
+    /// Reglages imposes (mode capture) ; nil : ceux de l'utilisateur.
+    @ObservationIgnored var styleOverride: ListeningStyle?
+    @ObservationIgnored var liveTextOverride: Bool?
     /// Jeton de la dictee en cours : tout travail d'une dictee precedente l'ignore.
     @ObservationIgnored private var session = 0
     @ObservationIgnored private var pipelineStarted = false
@@ -88,7 +104,7 @@ final class DictationController {
     @ObservationIgnored private var observers: [any NSObjectProtocol] = []
     @ObservationIgnored private let logger = Logger(subsystem: Brand.identity.bundleIdentifier, category: "latence")
 
-    init(audio: any AudioSource, makeTranscriber: @escaping (Locale) -> any Transcriber,
+    init(audio: any AudioSource, makeTranscriber: @escaping (Locale, Bool) -> any Transcriber,
          store: DictationStore?, deliversText: Bool) {
         self.audio = audio
         self.makeTranscriber = makeTranscriber
@@ -99,6 +115,7 @@ final class DictationController {
         panel = FloatingPanelController(size: size, takesFocus: false, placement: .bottom) { [unowned self] in
             ListeningPanel(controller: self)
         }
+        drop = DropPanelController(controller: self)
         audio.onLevel = { [weak self] level in self?.level = level }
         audio.onInterruption = { [weak self] in self?.microphoneInterrupted() }
     }
@@ -110,6 +127,8 @@ final class DictationController {
             Keys.directPaste: true,
             Keys.keepHistory: true,
             Keys.historyLimit: HistoryLimit.defaultValue.rawValue,
+            Keys.listeningStyle: ListeningStyle.defaultValue.rawValue,
+            Keys.liveText: true,
         ])
     }
 
@@ -149,6 +168,24 @@ final class DictationController {
         transcriberLocale = nil
         prepareEngine()
     }
+
+    /// Affichage ou texte en direct changes (Reglages) : le moteur suit (apercu ou non) s'il le faut.
+    func displaySettingsChanged() {
+        guard currentTranscriberIsStale else { return }
+        prepareEngine()
+    }
+
+    /// Reglages d'affichage de la prochaine dictee.
+    private var preferredStyle: ListeningStyle {
+        styleOverride ?? ListeningStyle(stored: UserDefaults.standard.string(forKey: Keys.listeningStyle))
+    }
+
+    private var prefersLiveText: Bool {
+        liveTextOverride ?? UserDefaults.standard.bool(forKey: Keys.liveText)
+    }
+
+    /// L'apercu ne sert qu'au texte en direct de la goutte : sans lui, pas de second analyseur.
+    private var wantsPreview: Bool { preferredStyle == .drop && prefersLiveText }
 
     /// Telecharge les ressources de la langue courante, puis prepare le moteur.
     func installLanguage() {
@@ -200,8 +237,14 @@ final class DictationController {
         releasedAt = nil
         target = NSWorkspace.shared.frontmostApplication
         level = 0
+        liveText = ""
+        if phase == .idle {
+            // Le panneau deja ouvert (dictee enchainee) garde son affichage.
+            style = preferredStyle
+            showsLiveText = prefersLiveText
+        }
         phase = .listening(since: Date())
-        panel?.show()
+        showPanel()
         installKeyMonitors()
         schedule(after: Self.holdLimit) { [weak self] in
             guard let self, id == self.session, case .holding = self.gesture.state else { return }
@@ -239,7 +282,12 @@ final class DictationController {
         work = Task { [weak self] in
             var buffer = TranscriptBuffer()
             do {
-                for try await transcript in output { buffer.add(transcript) }
+                for try await transcript in output {
+                    buffer.add(transcript)
+                    if let self, id == self.session, self.showsLiveText {
+                        self.liveText = LiveText.tail(buffer.live, maxCharacters: Self.liveTextLimit)
+                    }
+                }
             } catch is CancellationError {
                 return
             } catch {
@@ -293,6 +341,7 @@ final class DictationController {
         }
         var pasted = false
         lastText = polished
+        liveText = polished
         if deliversText {
             Paster.copy(polished)
             if defaults.bool(forKey: Keys.directPaste) && Paster.isTrusted {
@@ -320,8 +369,11 @@ final class DictationController {
         }
         guard id == session else { return }
         phase = .done(pasted: pasted)
-        // << Colle >> : bref ; << Copie : Cmd-V >> reste le temps d'etre lu.
-        schedule(after: pasted ? .milliseconds(600) : .milliseconds(1600)) { [weak self] in
+        // << Colle >> : bref (un peu plus quand la goutte montre le texte) ; << Copie : Cmd-V >> reste
+        // le temps d'etre lu.
+        let showsText = style == .drop && showsLiveText
+        let hold: Duration = pasted ? .milliseconds(showsText ? 1000 : 600) : .milliseconds(1600)
+        schedule(after: hold) { [weak self] in
             guard let self, id == self.session else { return }
             self.close()
         }
@@ -362,7 +414,7 @@ final class DictationController {
         if gesture.isListening { _ = gesture.cancel() }
         isLocked = false
         phase = .failed(message)
-        if panel?.isVisible != true { panel?.show() }
+        if !panelIsVisible { showPanel() }
         schedule(after: .milliseconds(2600)) { [weak self] in
             guard let self, id == self.session else { return }
             self.close()
@@ -375,7 +427,8 @@ final class DictationController {
         removeKeyMonitors()
         clearTimers()
         level = 0
-        panel?.hide()
+        hidePanel()
+        // Le contenu s'efface en 0,12 s (pilule comme goutte) : la goutte vide finit de remonter.
         schedule(after: .milliseconds(150)) { [weak self] in
             guard let self, id == self.session else { return }
             self.phase = .idle
@@ -384,13 +437,38 @@ final class DictationController {
 
     // MARK: - Moteur
 
+    /// Longueur maximale du texte en direct (environ trois lignes et demie de goutte).
+    static let liveTextLimit = 240
+
+    private var currentTranscriberIsStale: Bool {
+        transcriber == nil || transcriberLocale != Self.currentLocale || transcriberLive != wantsPreview
+    }
+
     private func currentTranscriber() -> any Transcriber {
+        if let transcriber, !currentTranscriberIsStale { return transcriber }
         let locale = Self.currentLocale
-        if let transcriber, transcriberLocale == locale { return transcriber }
-        let made = makeTranscriber(locale)
+        let live = wantsPreview
+        let made = makeTranscriber(locale, live)
         transcriber = made
         transcriberLocale = locale
+        transcriberLive = live
         return made
+    }
+
+    // MARK: - Panneau
+
+    private var panelIsVisible: Bool { panel?.isVisible == true || drop?.isVisible == true }
+
+    private func showPanel() {
+        switch style {
+        case .drop: drop?.show()
+        case .pill: panel?.show()
+        }
+    }
+
+    private func hidePanel() {
+        panel?.hide()
+        drop?.hide()
     }
 
     private func prepareEngine() {
@@ -462,6 +540,23 @@ final class DictationController {
 #if DEBUG
 // MARK: - Mode capture
 
+/// Moteur du mode capture : l'apercu tout de suite, puis rien (l'ecriture dure).
+struct SnapshotTranscriber: Transcriber {
+    let preview: String
+
+    func transcribe(_ audio: AsyncStream<AudioChunk>) -> AsyncThrowingStream<Transcript, any Error> {
+        let (stream, continuation) = AsyncThrowingStream<Transcript, any Error>.makeStream()
+        continuation.yield(Transcript(text: preview, isFinal: false, isPreview: true))
+        let task = Task {
+            for await _ in audio {}
+            try? await Task.sleep(for: .seconds(60))
+            continuation.finish()
+        }
+        continuation.onTermination = { _ in task.cancel() }
+        return stream
+    }
+}
+
 /// Source figee : aucun micro, un niveau constant (pose stable du blob).
 @MainActor
 final class FrozenAudio: AudioSource {
@@ -489,22 +584,44 @@ final class FrozenAudio: AudioSource {
 
 extension DictationController {
     /// Controleur du mode capture : FakeTranscriber lent (l'ecriture dure), niveau fige, rien de colle.
-    static func snapshot() -> DictationController {
+    static func snapshot(style: ListeningStyle = .pill) -> DictationController {
         let controller = DictationController(
             audio: FrozenAudio(level: 0.62),
-            makeTranscriber: { _ in FakeTranscriber.progressive("bonjour tout le monde", delay: .seconds(60)) },
+            makeTranscriber: { _, _ in SnapshotTranscriber(preview: snapshotPreview) },
             store: nil, deliversText: false)
         controller.fixedBlobTime = 2.4
+        controller.styleOverride = style
+        controller.liveTextOverride = true
         return controller
     }
 
-    /// Amene le panneau en ecoute maintenue (minuteur a 0:04).
+    /// Texte en direct fictif (apercu brut, sans majuscule ni ponctuation finale) et texte ecrit.
+    static let snapshotPreview = "bonjour Claire je te confirme notre rendez-vous de jeudi \u{00E0} 10 h 30 peux-tu apporter le dossier du projet et les chiffres du trimestre"
+    static let snapshotFinal = "Bonjour Claire, je te confirme notre rendez-vous de jeudi \u{00E0} 10\u{00A0}h\u{00A0}30. Peux-tu apporter le dossier du projet et les chiffres du trimestre\u{202F}? Merci et \u{00E0} bient\u{00F4}t."
+
+    /// Fenetre de la goutte (mode capture).
+    var dropWindow: NSWindow? { drop?.nsWindow }
+
+    /// Amene la goutte au texte ecrit et colle.
+    func snapshotDone() async {
+        await snapshotWriting()
+        clearTimers()
+        removeKeyMonitors()
+        // Nouveau jeton : la fin du travail annule ne livre rien (ni ne ferme la goutte).
+        session += 1
+        work?.cancel()
+        liveText = Self.snapshotFinal
+        phase = .done(pasted: true)
+        try? await Task.sleep(for: .milliseconds(500))
+    }
+
+    /// Amene le panneau en ecoute maintenue (minuteur a 0:04 ; 0:09 pour la goutte, qui a deja du texte).
     func snapshotListening() async {
         if phase == .idle {
             handle(gesture.press(at: 1_000))
-            phase = .listening(since: Date().addingTimeInterval(-4))
+            phase = .listening(since: Date().addingTimeInterval(style == .drop ? -9 : -4))
         }
-        try? await Task.sleep(for: .milliseconds(400))
+        try? await Task.sleep(for: .milliseconds(style == .drop ? 700 : 400))
     }
 
     /// Amene le panneau en ecriture (relachement apres un maintien).

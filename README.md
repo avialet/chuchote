@@ -18,6 +18,8 @@
 - **Rapide et sur votre Mac.** La reconnaissance vocale de macOS tourne en local : rien n’est envoyé.
 - **Rester chez vous.** Tout est stocké sur votre Mac. Aucun compte, aucun serveur, aucune télémétrie.
 
+![La goutte de Chuchote sort de l'encoche et écrit la dictée en direct](docs/images/goutte.png)
+
 ## Installation
 
 **Prérequis :** un Mac Apple Silicon sous macOS 26 (Tahoe) ou plus récent.
@@ -54,6 +56,10 @@ Le seul échange réseau de Chuchote est cette lecture de la version publiée. A
 - **Maintenir pour dicter.** Tenez **⌃⌥Espace** (modifiable dans les Réglages), parlez, relâchez :
   le texte est mis au propre (majuscule, ponctuation, typographie française) puis collé dans l’app
   active. Il reste aussi dans le presse-papiers.
+- **La goutte.** Pendant la dictée, une goutte noire sort de l’encoche (en haut au centre sur un écran
+  sans encoche) : le blob suit votre voix, le minuteur tourne et le texte s’écrit en direct, pour voir
+  ce que Chuchote comprend. Le texte collé vient ensuite du modèle complet, plus précis. La croix ou
+  **Échap** annulent. Réglages › Dictée : **Goutte d’encoche** ou **Pilule en bas**, texte en direct ou non.
 - **Appui bref : écoute verrouillée.** Un appui court lance l’écoute sans tenir la touche ; un second
   appui termine et colle. **Échap** annule à tout moment, sans rien écrire.
 - **Historique.** La fenêtre (Dock, ou **Historique** dans la barre des menus) garde les dernières

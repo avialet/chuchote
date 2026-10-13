@@ -89,9 +89,11 @@ final class DictationController {
     @ObservationIgnored private let deliversText: Bool
     @ObservationIgnored private var panel: FloatingPanelController<ListeningPanel>?
     @ObservationIgnored private var drop: DropPanelController?
+    #if DEBUG
     /// Reglages imposes (mode capture) ; nil : ceux de l'utilisateur.
     @ObservationIgnored var styleOverride: ListeningStyle?
     @ObservationIgnored var liveTextOverride: Bool?
+    #endif
     /// Jeton de la dictee en cours : tout travail d'une dictee precedente l'ignore.
     @ObservationIgnored private var session = 0
     @ObservationIgnored private var pipelineStarted = false
@@ -177,11 +179,17 @@ final class DictationController {
 
     /// Reglages d'affichage de la prochaine dictee.
     private var preferredStyle: ListeningStyle {
-        styleOverride ?? ListeningStyle(stored: UserDefaults.standard.string(forKey: Keys.listeningStyle))
+        #if DEBUG
+        if let styleOverride { return styleOverride }
+        #endif
+        return ListeningStyle(stored: UserDefaults.standard.string(forKey: Keys.listeningStyle))
     }
 
     private var prefersLiveText: Bool {
-        liveTextOverride ?? UserDefaults.standard.bool(forKey: Keys.liveText)
+        #if DEBUG
+        if let liveTextOverride { return liveTextOverride }
+        #endif
+        return UserDefaults.standard.bool(forKey: Keys.liveText)
     }
 
     /// L'apercu ne sert qu'au texte en direct de la goutte : sans lui, pas de second analyseur.

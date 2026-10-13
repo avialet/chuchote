@@ -59,8 +59,10 @@ final class DropPanelController {
 
     var isVisible: Bool { window?.isVisible == true }
 
+    #if DEBUG
     /// Fenetre (mode capture).
     var nsWindow: NSWindow? { window }
+    #endif
 
     func show() {
         openCount += 1

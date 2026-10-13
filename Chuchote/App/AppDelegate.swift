@@ -5,8 +5,8 @@ import VialetKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         #if DEBUG
-        // Mode capture : ni raccourci global, ni micro, ni reseau.
-        if runSnapshotIfRequested() { return }
+        // Mode capture et essai du moteur : ni raccourci global, ni micro, ni reseau.
+        if runSnapshotIfRequested() || EngineCheck.runIfRequested() || FlowCheck.runIfRequested() { return }
         #endif
         // Le raccourci dicte ; la fenetre principale s'ouvre par le menu et le Dock.
         DictationController.shared.start()

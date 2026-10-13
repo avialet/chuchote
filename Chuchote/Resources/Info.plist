@@ -37,6 +37,8 @@
 	<string>public.app-category.productivity</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>26.0</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Chuchote &#xE9;coute le micro seulement pendant que vous dictez, pour &#xE9;crire ce que vous dites. Tout reste sur votre Mac.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>&#xA9; 2026 Aur&#xE9;lien Vialet</string>
 </dict>

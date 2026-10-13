@@ -46,6 +46,7 @@ targets:
           - CFBundleURLName: fr.vialet.chuchote
             CFBundleURLSchemes: [chuchote]
         LSApplicationCategoryType: public.app-category.productivity
+        NSMicrophoneUsageDescription: "Chuchote \u00E9coute le micro seulement pendant que vous dictez, pour \u00E9crire ce que vous dites. Tout reste sur votre Mac."
         CFBundleIconFile: AppIcon
     entitlements:
       path: Chuchote/Resources/Chuchote.entitlements

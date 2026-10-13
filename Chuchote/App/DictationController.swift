@@ -297,6 +297,8 @@ final class DictationController {
             Paster.copy(polished)
             if defaults.bool(forKey: Keys.directPaste) && Paster.isTrusted {
                 try? await Task.sleep(for: .milliseconds(60))
+                // Echap (ou nouvelle dictee) pendant l'attente : rien a coller ni a enregistrer.
+                guard id == session else { return }
                 pasted = Paster.simulatePaste()
             }
             if let releasedAt {

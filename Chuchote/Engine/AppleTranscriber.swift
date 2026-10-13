@@ -130,54 +130,65 @@ private struct Session: Sendable {
         let main = main
         let live = live
         try await withTaskCancellationHandler {
-            try await main.analyzer.start(inputSequence: inputs)
-            var preview: Task<Void, Never>?
-            if let live {
-                try await live.analyzer.start(inputSequence: liveInputs)
-                preview = Task {
-                    do {
-                        for try await result in live.module.results {
-                            emit(Transcript(text: String(result.text.characters), isFinal: result.isFinal,
-                                            isPreview: true))
-                        }
-                    } catch {}
-                }
-            }
-            defer { preview?.cancel() }
-            try await withThrowingTaskGroup(of: Void.self) { group in
-                group.addTask {
-                    for try await result in main.module.results {
-                        emit(Transcript(text: String(result.text.characters), isFinal: result.isFinal))
-                    }
-                }
-                group.addTask {
-                    var converter: PCMConverter?
-                    var liveConverter: PCMConverter?
-                    for await chunk in audio {
-                        guard let buffer = chunk.pcmBuffer() else { continue }
-                        if converter?.input != buffer.format {
-                            converter = PCMConverter(from: buffer.format, to: main.format)
-                        }
-                        let converted = converter?.convert(buffer)
-                        if let converted { feed.yield(AnalyzerInput(buffer: converted)) }
-                        guard let live else { continue }
-                        if live.format == main.format {
-                            if let converted { liveFeed.yield(AnalyzerInput(buffer: converted)) }
-                        } else {
-                            if liveConverter?.input != buffer.format {
-                                liveConverter = PCMConverter(from: buffer.format, to: live.format)
+            do {
+                try await main.analyzer.start(inputSequence: inputs)
+                // Apercu facultatif : s'il ne demarre pas, la dictee continue sans lui.
+                let active = await Self.startPreview(live, inputs: liveInputs, feed: liveFeed)
+                let preview = active.map { live in
+                    Task {
+                        do {
+                            for try await result in live.module.results {
+                                emit(Transcript(text: String(result.text.characters), isFinal: result.isFinal,
+                                                isPreview: true))
                             }
-                            if let other = liveConverter?.convert(buffer) { liveFeed.yield(AnalyzerInput(buffer: other)) }
+                        } catch {}
+                    }
+                }
+                defer { preview?.cancel() }
+                try await withThrowingTaskGroup(of: Void.self) { group in
+                    group.addTask {
+                        for try await result in main.module.results {
+                            emit(Transcript(text: String(result.text.characters), isFinal: result.isFinal))
                         }
                     }
-                    feed.finish()
-                    // L'apercu s'arrete net : il ne dispute pas la finalisation au texte.
-                    liveFeed.finish()
-                    if let live { Task { await live.analyzer.cancelAndFinishNow() } }
-                    try Task.checkCancellation()
-                    try await main.analyzer.finalizeAndFinishThroughEndOfInput()
+                    group.addTask {
+                        var converter: PCMConverter?
+                        var liveConverter: PCMConverter?
+                        for await chunk in audio {
+                            guard let buffer = chunk.pcmBuffer() else { continue }
+                            if converter?.input != buffer.format {
+                                converter = PCMConverter(from: buffer.format, to: main.format)
+                            }
+                            let converted = converter?.convert(buffer)
+                            if let converted { feed.yield(AnalyzerInput(buffer: converted)) }
+                            guard let active else { continue }
+                            if active.format == main.format {
+                                if let converted { liveFeed.yield(AnalyzerInput(buffer: converted)) }
+                            } else {
+                                if liveConverter?.input != buffer.format {
+                                    liveConverter = PCMConverter(from: buffer.format, to: active.format)
+                                }
+                                if let other = liveConverter?.convert(buffer) {
+                                    liveFeed.yield(AnalyzerInput(buffer: other))
+                                }
+                            }
+                        }
+                        feed.finish()
+                        // L'apercu s'arrete net : il ne dispute pas la finalisation au texte.
+                        liveFeed.finish()
+                        if let active { Task { await active.analyzer.cancelAndFinishNow() } }
+                        try Task.checkCancellation()
+                        try await main.analyzer.finalizeAndFinishThroughEndOfInput()
+                    }
+                    try await group.waitForAll()
                 }
-                try await group.waitForAll()
+            } catch {
+                // Aucun analyseur laisse ouvert.
+                feed.finish()
+                liveFeed.finish()
+                await main.analyzer.cancelAndFinishNow()
+                await live?.analyzer.cancelAndFinishNow()
+                throw error
             }
         } onCancel: {
             feed.finish()
@@ -188,14 +199,38 @@ private struct Session: Sendable {
             }
         }
     }
+
+    /// Demarre l'analyseur de l'apercu. S'il ne demarre pas : son flux est ferme, l'analyseur annule,
+    /// et la dictee continue sans apercu (nil).
+    private static func startPreview(_ live: Stage?, inputs: AsyncStream<AnalyzerInput>,
+                                     feed: AsyncStream<AnalyzerInput>.Continuation) async -> Stage? {
+        guard let live else { return nil }
+        do {
+            #if DEBUG
+            // Essai : `CHUCHOTE_FAIL_PREVIEW_START=1` simule un apercu qui ne demarre pas.
+            if ProcessInfo.processInfo.environment["CHUCHOTE_FAIL_PREVIEW_START"] != nil {
+                throw EngineError.previewUnavailable
+            }
+            #endif
+            try await live.analyzer.start(inputSequence: inputs)
+            return live
+        } catch {
+            feed.finish()
+            await live.analyzer.cancelAndFinishNow()
+            return nil
+        }
+    }
 }
 
 enum EngineError: LocalizedError {
     case noAudioFormat
+    /// L'apercu en direct n'a pas demarre (la dictee continue sans lui).
+    case previewUnavailable
 
     var errorDescription: String? {
         switch self {
         case .noAudioFormat: "Le moteur de dict\u{00E9}e ne propose aucun format audio pour cette langue."
+        case .previewUnavailable: "L\u{2019}aper\u{00E7}u en direct n\u{2019}a pas d\u{00E9}marr\u{00E9}."
         }
     }
 }

@@ -6,7 +6,8 @@ import ChuchoteCore
 /// Lit le fichier en blocs de 100 ms au rythme reel, le passe deux fois dans AppleTranscriber (la premiere
 /// apres la preparation : moteur chaud ; la seconde comme une dictee suivante), et mesure la latence entre
 /// la fin de l'audio et la fin du texte, sans puis avec l'apercu en direct (premier apercu, nombre).
-/// Imprime le rapport (et l'ecrit dans le fichier demande), puis quitte.
+/// Imprime le rapport (et l'ecrit dans le fichier demande), puis quitte. Avec `CHUCHOTE_FAIL_PREVIEW_START=1`,
+/// l'apercu ne demarre pas : la dictee doit continuer sans (0 apercu, meme texte).
 enum EngineCheck {
     static func runIfRequested() -> Bool {
         let args = CommandLine.arguments

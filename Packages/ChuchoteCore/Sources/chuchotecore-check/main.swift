@@ -10,4 +10,5 @@ run([
     blobGeometryTests,
     historyListTests,
     setupTests,
+    liveTextTests,
 ])

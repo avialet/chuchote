@@ -18,38 +18,66 @@ public struct AudioChunk: Sendable, Equatable {
 }
 
 /// Texte reconnu. Un partiel (`isFinal == false`) remplace le partiel precedent ;
-/// un final est definitif pour son segment.
+/// un final est definitif pour son segment. Un apercu (`isPreview`) vient d'un moteur rapide,
+/// pour l'affichage en direct seulement : il n'entre jamais dans le texte colle.
 public struct Transcript: Sendable, Equatable {
     public var text: String
     public var isFinal: Bool
+    public var isPreview: Bool
 
-    public init(text: String, isFinal: Bool) {
+    public init(text: String, isFinal: Bool, isPreview: Bool = false) {
         self.text = text
         self.isFinal = isFinal
+        self.isPreview = isPreview
     }
 }
 
 /// Texte d'une dictee au fil des transcriptions : les finals bout a bout, puis le dernier
 /// partiel (qui remplace le precedent) tant qu'aucun final ne l'a remplace. Segments vides ignores,
-/// blancs de bord retires ; la mise au propre reste a `Polish`.
+/// blancs de bord retires ; la mise au propre reste a `Polish`. Les apercus suivent la meme regle
+/// dans un texte a part (`preview`), pour l'affichage seulement.
 public struct TranscriptBuffer: Sendable, Equatable {
-    private var finals: [String] = []
-    private var partial = ""
+    private var main = Segments()
+    private var fast = Segments()
 
     public init() {}
 
     public mutating func add(_ transcript: Transcript) {
-        let text = transcript.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if transcript.isFinal {
-            if !text.isEmpty { finals.append(text) }
-            partial = ""
+        if transcript.isPreview {
+            fast.add(transcript)
         } else {
-            partial = text
+            main.add(transcript)
         }
     }
 
-    public var text: String {
-        (partial.isEmpty ? finals : finals + [partial]).joined(separator: " ")
+    /// Texte a coller : celui du moteur principal (jamais les apercus).
+    public var text: String { main.text }
+
+    /// Texte de l'apercu en direct.
+    public var preview: String { fast.text }
+
+    /// Texte a montrer pendant la dictee : l'apercu s'il y en a un, sinon le texte du moteur principal.
+    public var live: String { fast.isEmpty ? main.text : fast.text }
+
+    private struct Segments: Sendable, Equatable {
+        var finals: [String] = []
+        var partial = ""
+
+        var isEmpty: Bool { finals.isEmpty && partial.isEmpty }
+
+        mutating func add(_ transcript: Transcript) {
+            let text = transcript.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if transcript.isFinal {
+                if !text.isEmpty { finals.append(text) }
+                partial = ""
+            } else {
+                partial = text
+            }
+        }
+
+        var text: String {
+            (partial.isEmpty ? finals : finals + [partial]).joined(separator: " ")
+        }
     }
 }
 

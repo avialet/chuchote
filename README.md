@@ -55,7 +55,7 @@ Le seul échange réseau de Chuchote est cette lecture de la version publiée. A
 
 <!-- a adapter -->
 
-- **Raccourci global** (⌃⌥⇧Espace par défaut, modifiable dans les Réglages) : affiche ou masque Chuchote depuis n'importe quelle app.
+- **Raccourci global** (⌃⌥Espace par défaut, modifiable dans les Réglages) : maintenir pour dicter, appui bref pour une écoute verrouillée ; le texte est collé dans l’app active et reste dans le presse-papiers.
 - Fermer la fenêtre ne quitte pas l'app : le raccourci et l'icône de la barre des menus restent actifs. **⌘Q** quitte vraiment.
 - Le lien `chuchote://` ouvre la fenêtre principale.
 - **À propos de Chuchote** (menu de l'app ou de la barre des menus) : version, licence MIT, liens vers le site et le code source.

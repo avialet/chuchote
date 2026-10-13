@@ -12,7 +12,7 @@ enum Brand {
                                        night: 0x2C1116, nightInk: 0xFCC8CE)
     /// Pictogramme de la plaque : sous-ensemble SVG absolu (M L H V C Q Z), boite 0-100, trait non rempli.
     /// Vide = initiale en repli. Dessiner le trace, verifier avec `swift ../scripts/plaque.swift planche`, puis `make icon`.
-    static let glyph = ""
+    static let glyph = "M 20 46 V 54 M 35 30 V 70 M 50 40 V 60 M 65 22 V 78 M 80 42 V 58"
     /// Trait du glyphe en `deep` plutot qu'en blanc (accent trop clair pour un trait blanc).
     static let strokeDeep = false
     static let identity = AppIdentity(name: name, displayName: displayName, repository: "avialet/chuchote",
@@ -29,8 +29,7 @@ extension Updater {
 }
 
 extension HotKeyController {
-    /// Choisir un raccourci libre : ⇧⌘Espace (Pico), ⌃⌥⌘Espace (Allege), ⌃⇧Espace (Pince) et ⌥⇧Espace (Brouillon)
-    /// sont deja pris. Mettre a jour la ligne « Raccourci global » du README.
+    /// ⌃⌥Espace : libre dans le portefeuille (⇧⌘ Pico, ⌃⌥⌘ Allege, ⌃⇧ Pince, ⌥⇧ Brouillon) et pour macOS.
     static let shared = HotKeyController(defaultsKey: Brand.key("HotKey"), logName: Brand.displayName,
-                                         initial: .space([.control, .option, .shift]))
+                                         initial: .space([.control, .option]))
 }

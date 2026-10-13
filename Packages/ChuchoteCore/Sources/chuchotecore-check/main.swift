@@ -5,4 +5,5 @@ run([
     hotKeyGestureTests,
     transcriberTests,
     polishTests,
+    levelMeterTests,
 ])

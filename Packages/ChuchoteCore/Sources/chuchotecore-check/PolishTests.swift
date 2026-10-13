@@ -83,12 +83,28 @@ let polishTests: (String, [Test]) = ("Polish", [
         expectEqual(fr("jean@exemple.fr r\u{E9}pond"), "jean@exemple.fr r\u{E9}pond.")
         expectEqual(fr("lien: https://exemple.fr"), "Lien\(nbsp): https://exemple.fr")
     },
+    Test("noFrenchSpaceAfterAddress") {
+        expectEqual(fr("tu connais https://exemple.fr?"), "Tu connais https://exemple.fr?")
+        expectEqual(fr("tu connais https://exemple.fr ?"), "Tu connais https://exemple.fr ?")
+        expectEqual(fr("\u{E9}cris \u{E0} jean@exemple.fr!"), "\u{C9}cris \u{E0} jean@exemple.fr!")
+        expectEqual(fr("voir www.exemple.fr: la suite"), "Voir www.exemple.fr: la suite.")
+        expectEqual(fr("voir www.exemple.fr; puis rien"), "Voir www.exemple.fr; puis rien.")
+        // Le mot suivant l'adresse reste traite.
+        expectEqual(fr("https://exemple.fr marche?"), "https://exemple.fr marche\(nnbsp)?")
+    },
+    Test("capitalizesAfterElision") {
+        expectEqual(fr("l'Europe va bien"), "L\(apos)Europe va bien.")
+        expectEqual(fr("l'Europe va bien", typography: false), "L'Europe va bien.")
+        expectEqual(fr("d'Artagnan arrive"), "D\(apos)Artagnan arrive.")
+        expectEqual(fr("iPhone et iPad"), "iPhone et iPad.")
+    },
     Test("idempotent") {
         let samples = [
             "", "  ", "bonjour", "\u{E7}a va ?", "quoi?! non", "note: voici; la suite!",
             "il a dit \"bonjour\" hier", "\u{AB} oui \u{BB}", "l'eau d'ici", "\u{E0} 10:30",
             "va sur https://exemple.fr/page?x=1 maintenant", "jean@exemple.fr", "un  \n  deux",
-            "iPhone", "10 pommes", "well...",
+            "iPhone", "10 pommes", "well...", "l'Europe va bien", "tu connais https://exemple.fr?",
+            "voir www.exemple.fr: la suite",
         ]
         for sample in samples {
             for locale in ["fr-FR", "en-US"] {

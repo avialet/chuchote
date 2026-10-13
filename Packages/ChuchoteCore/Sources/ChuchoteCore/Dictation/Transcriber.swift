@@ -39,14 +39,17 @@ public protocol Transcriber: Sendable {
 
 /// Moteur scripte, pour les tests et le mode capture. Emet les partiels du script
 /// (dans l'ordre, avec `delay` avant chacun), attend la fin de l'audio, puis emet
-/// le reste du script a partir du premier final.
+/// le reste du script a partir du premier final, et enfin `failure` s'il y en a une.
 public struct FakeTranscriber: Transcriber {
     public let script: [Transcript]
     public let delay: Duration
+    /// Erreur qui termine le flux apres le script et la fin de l'audio (nil : fin normale).
+    public let failure: (any Error)?
 
-    public init(script: [Transcript], delay: Duration = .zero) {
+    public init(script: [Transcript], delay: Duration = .zero, failure: (any Error)? = nil) {
         self.script = script
         self.delay = delay
+        self.failure = failure
     }
 
     /// Partiels mot a mot puis la phrase entiere en final.
@@ -65,6 +68,7 @@ public struct FakeTranscriber: Transcriber {
         let (stream, continuation) = AsyncThrowingStream<Transcript, any Error>.makeStream()
         let script = script
         let delay = delay
+        let failure = failure
         let task = Task {
             do {
                 var audioEnded = false
@@ -78,6 +82,8 @@ public struct FakeTranscriber: Transcriber {
                     continuation.yield(transcript)
                 }
                 if !audioEnded { for await _ in audio {} }
+                try Task.checkCancellation()
+                if let failure { throw failure }
                 continuation.finish()
             } catch {
                 continuation.finish(throwing: error)

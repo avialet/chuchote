@@ -100,6 +100,7 @@ final class DictationController {
             ListeningPanel(controller: self)
         }
         audio.onLevel = { [weak self] level in self?.level = level }
+        audio.onInterruption = { [weak self] in self?.microphoneInterrupted() }
     }
 
     static func registerDefaults() {
@@ -324,6 +325,12 @@ final class DictationController {
         }
     }
 
+    /// Micro perdu en pleine ecoute (peripherique change sans reprise possible).
+    private func microphoneInterrupted() {
+        guard case .listening = phase else { return }
+        fail("Micro interrompu")
+    }
+
     private func transcriptionFailed(_ id: Int, _ error: any Error) {
         guard id == session else { return }
         gesture.finished()
@@ -457,6 +464,7 @@ final class DictationController {
 @MainActor
 final class FrozenAudio: AudioSource {
     var onLevel: ((Double) -> Void)?
+    var onInterruption: (() -> Void)?
     let level: Double
     private var continuation: AsyncStream<AudioChunk>.Continuation?
 

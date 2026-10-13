@@ -6,6 +6,9 @@ import ChuchoteCore
 protocol AudioSource: AnyObject {
     /// Niveau 0-1 lisse (attaque 60 ms, relache 250 ms), publie sur le MainActor (~30 Hz).
     var onLevel: ((Double) -> Void)? { get set }
+    /// Ecoute interrompue par la source elle-meme (micro perdu), appele sur le MainActor ; le flux
+    /// est ensuite termine.
+    var onInterruption: (() -> Void)? { get set }
     /// Vrai si l'ecoute est autorisee (demande la permission au premier usage).
     func authorize() async -> Bool
     /// Demarre l'ecoute : blocs mono Float32 a `sampleRate`, jusqu'a `stop()`.
@@ -31,8 +34,13 @@ final class Microphone: AudioSource {
     }
 
     var onLevel: ((Double) -> Void)?
+    var onInterruption: (() -> Void)?
     private let engine = AVAudioEngine()
     private var tap: MicrophoneTap?
+    /// Ecoute en cours : flux, format cible et observation des changements de peripherique.
+    private var continuation: AsyncStream<AudioChunk>.Continuation?
+    private var target: AVAudioFormat?
+    private var configurationObserver: (any NSObjectProtocol)?
     private var isPrepared = false
 
     static var isAuthorized: Bool { AVCaptureDevice.authorizationStatus(for: .audio) == .authorized }
@@ -66,9 +74,7 @@ final class Microphone: AudioSource {
                                          channels: 1, interleaved: false),
               let converter = PCMConverter(from: format, to: target) else { throw Failure.noInput }
         let (stream, continuation) = AsyncStream<AudioChunk>.makeStream()
-        let tap = MicrophoneTap(converter: converter, continuation: continuation) { [weak self] level in
-            self?.onLevel?(level)
-        }
+        let tap = makeTap(converter: converter, continuation: continuation)
         input.installTap(onBus: 0, bufferSize: 1024, format: format, block: tap.block())
         do {
             try engine.start()
@@ -78,15 +84,61 @@ final class Microphone: AudioSource {
             throw Failure.engine(error.localizedDescription)
         }
         self.tap = tap
+        self.continuation = continuation
+        self.target = target
+        // Peripherique change en pleine ecoute (AirPods, micro debranche) : le moteur s'arrete.
+        configurationObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.configurationChanged() }
+        }
         return stream
+    }
+
+    private func makeTap(converter: PCMConverter,
+                         continuation: AsyncStream<AudioChunk>.Continuation) -> MicrophoneTap {
+        MicrophoneTap(converter: converter, continuation: continuation) { [weak self] level in
+            self?.onLevel?(level)
+        }
+    }
+
+    /// Le moteur s'est arrete sur un changement de peripherique : nouveau tap au nouveau format,
+    /// meme flux ; si le micro ne repart pas, l'ecoute est interrompue.
+    private func configurationChanged() {
+        guard let old = tap, let continuation, let target else { return }
+        let input = engine.inputNode
+        input.removeTap(onBus: 0)
+        old.retire()
+        let format = input.outputFormat(forBus: 0)
+        guard format.sampleRate > 0, format.channelCount > 0,
+              let converter = PCMConverter(from: format, to: target) else {
+            interrupt()
+            return
+        }
+        let tap = makeTap(converter: converter, continuation: continuation)
+        input.installTap(onBus: 0, bufferSize: 1024, format: format, block: tap.block())
+        self.tap = tap
+        do {
+            try engine.start()
+        } catch {
+            interrupt()
+        }
+    }
+
+    private func interrupt() {
+        onInterruption?()
+        stop()
     }
 
     func stop() {
         guard let tap else { return }
+        if let configurationObserver { NotificationCenter.default.removeObserver(configurationObserver) }
+        configurationObserver = nil
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         tap.finish()
         self.tap = nil
+        continuation = nil
+        target = nil
         onLevel?(0)
         // Pret pour la prochaine ecoute.
         engine.prepare()
@@ -137,4 +189,7 @@ private final class MicrophoneTap: @unchecked Sendable {
         stopped = true
         continuation.finish()
     }
+
+    /// Tap remplace (changement de peripherique) : n'emet plus de niveau, le flux continue.
+    @MainActor func retire() { stopped = true }
 }

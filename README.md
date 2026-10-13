@@ -96,7 +96,7 @@ make install   # installe dans /Applications
 make release   # fabrique build/Chuchote-X.Y.Z.dmg et son empreinte
 ```
 
-L'icône et l'habillage du DMG viennent du dépôt [vialetapps](https://github.com/avialet/vialetapps)
+L'icône et l'habillage du DMG viennent de l’outillage commun des apps vialet.app
 (`scripts/plaque.swift`), cloné à côté de l'app (sinon `VIALETAPPS_PATH=<chemin>`) :
 
 ```bash

@@ -3,7 +3,7 @@ import SwiftUI
 import VialetKit
 
 /// Historique des dictees : recherche, carte d'accueil tant qu'une autorisation manque, dictees
-/// groupees par anciennete. Le champ garde le focus : fleches, ↩ (recopier) et ⌘⌫ (supprimer)
+/// groupees par anciennete. Le champ garde le focus : fleches, Retour (recopier) et Cmd-Effacer (supprimer)
 /// agissent sur la ligne choisie.
 struct DictationList: View {
     @Environment(AppState.self) private var state

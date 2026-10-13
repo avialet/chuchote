@@ -73,7 +73,7 @@ public enum DictationFormat {
         return formatter.string(from: date)
     }
 
-    /// << Mail · 12 s · 24 mots >> ; sans app cible : << 12 s · 24 mots >>.
+    /// << Mail - 12 s - 24 mots >> ; sans app cible : << 12 s - 24 mots >>.
     public static func meta(_ dictation: Dictation) -> String {
         var parts: [String] = []
         if let app = dictation.targetApp?.trimmingCharacters(in: .whitespacesAndNewlines), !app.isEmpty {

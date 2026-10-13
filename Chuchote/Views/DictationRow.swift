@@ -2,7 +2,7 @@ import ChuchoteCore
 import SwiftUI
 import VialetKit
 
-/// Ligne de l'historique : le texte (3 lignes au plus), puis << app cible · duree · mots >> et
+/// Ligne de l'historique : le texte (3 lignes au plus), puis << app cible - duree - mots >> et
 /// l'horodatage ; << Copie >> remplace l'horodatage un instant apres une recopie.
 struct DictationRow: View {
     let dictation: Dictation

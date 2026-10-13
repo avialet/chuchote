@@ -3,7 +3,7 @@ import SwiftUI
 import VialetKit
 
 /// Fenetre principale (grammaire de Pince) : barre laterale (marque, compteurs du jour, langue,
-/// mise a jour, raccourci) et, a droite, l'historique des dictees.
+/// raccourci) et, a droite, le bandeau de mise a jour puis l'historique des dictees.
 struct MainWindow: View {
     @Environment(AppState.self) private var state
 
@@ -13,9 +13,12 @@ struct MainWindow: View {
                 .frame(width: 200)
                 .frame(maxHeight: .infinity)
                 .background(Theme.sidebar)
-            DictationList()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(AmbientBackground())
+            VStack(spacing: 0) {
+                UpdateNotice(updater: .shared)
+                DictationList()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(AmbientBackground())
         }
         .onAppear { state.reload() }
         .onChange(of: DictationController.shared.historyVersion) { _, _ in state.reload() }
@@ -48,7 +51,6 @@ private struct Sidebar: View {
             .padding(.top, 26)
 
             Spacer(minLength: 0)
-            UpdateBanner(updater: Updater.shared)
             ShortcutFooter(HotKeyController.shared.shortcut)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

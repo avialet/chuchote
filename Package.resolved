@@ -1,0 +1,24 @@
+{
+  "originHash" : "5be9dabd901522f20e943b903d7e16ba29ecceda203c0bd4af937c21858c051d",
+  "pins" : [
+    {
+      "identity" : "grdb.swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/groue/GRDB.swift.git",
+      "state" : {
+        "revision" : "b83108d10f42680d78f23fe4d4d80fc88dab3212",
+        "version" : "7.11.1"
+      }
+    },
+    {
+      "identity" : "vialetkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/avialet/vialetkit.git",
+      "state" : {
+        "revision" : "65b5b5ce69b1118d5ce97ecdfe189c86a2a9009b",
+        "version" : "0.2.1"
+      }
+    }
+  ],
+  "version" : 3
+}

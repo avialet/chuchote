@@ -5,7 +5,8 @@ import SwiftUI
 import VialetKit
 
 /// Fenetre de la goutte : sans bord, jamais cle ni principale, au-dessus de la barre des menus, sur toutes
-/// les Spaces et en plein ecran. Transparente hors de la goutte : les clics y passent a travers.
+/// les Spaces et en plein ecran. Elle ignore la souris par defaut ; `DropPanelController` ne la rend
+/// cliquable que tant que le curseur est sur la goutte visible.
 final class DropWindow: NSPanel {
     init(size: CGSize) {
         super.init(contentRect: NSRect(origin: .zero, size: size),
@@ -19,6 +20,7 @@ final class DropWindow: NSPanel {
         isOpaque = false
         hasShadow = false
         animationBehavior = .none
+        ignoresMouseEvents = true
     }
 
     override var canBecomeKey: Bool { false }
@@ -34,12 +36,19 @@ final class DropWindow: NSPanel {
 @Observable
 final class DropPanelController {
     /// Goutte ouverte (la vue anime le passage).
-    private(set) var expanded = false
+    private(set) var expanded = false {
+        didSet { updatePointer() }
+    }
     private(set) var geometry = NotchGeometry(screenFrame: .zero, safeAreaTop: 0, auxiliaryLeft: nil,
                                               auxiliaryRight: nil, menuBarHeight: 24)
+    /// Hauteur de la goutte dessinee (rapportee par la vue).
+    @ObservationIgnored private(set) var dropHeight: CGFloat = 0
     @ObservationIgnored private unowned let controller: DictationController
     @ObservationIgnored private var window: DropWindow?
     @ObservationIgnored private var openCount = 0
+    /// Suivi du curseur pendant l'affichage (moniteurs global et local, et releve periodique de secours).
+    @ObservationIgnored private var pointerMonitors: [Any] = []
+    @ObservationIgnored private var pointerTimer: Timer?
 
     /// Marge autour de la goutte : bords evases et ombre.
     static let margin: CGFloat = 28
@@ -63,6 +72,7 @@ final class DropPanelController {
             window.setFrame(geometry.windowFrame(size: Self.windowSize(for: geometry)), display: true)
             window.orderFrontRegardless()
         }
+        startTrackingPointer()
         // Un tour de boucle : la vue part de l'encoche avant de s'ouvrir.
         DispatchQueue.main.async { [weak self] in
             MainActor.assumeIsolated { self?.expanded = true }
@@ -77,9 +87,57 @@ final class DropPanelController {
         DispatchQueue.main.asyncAfter(deadline: .now() + DropView.closeDuration) { [weak self] in
             MainActor.assumeIsolated {
                 guard let self, self.openCount == token else { return }
+                self.stopTrackingPointer()
                 window.orderOut(nil)
             }
         }
+    }
+
+    /// Rectangle de la goutte visible (coordonnees d'ecran) : seul endroit ou la fenetre prend les clics.
+    var hitRect: CGRect { geometry.hitRect(expanded: expanded, dropHeight: dropHeight) }
+
+    func reportHeight(_ height: CGFloat) {
+        dropHeight = height
+        updatePointer()
+    }
+
+    /// La fenetre ne prend la souris que sur la goutte visible : partout ailleurs (marges, ombre, goutte
+    /// fermee ou en train de remonter), les clics vont a ce qui est dessous.
+    private func updatePointer() {
+        guard let window else { return }
+        let inside = window.isVisible && hitRect.contains(NSEvent.mouseLocation)
+        if window.ignoresMouseEvents == inside { window.ignoresMouseEvents = !inside }
+    }
+
+    private func startTrackingPointer() {
+        updatePointer()
+        guard pointerMonitors.isEmpty else { return }
+        let moves: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged]
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: moves, handler: { [weak self] _ in
+            MainActor.assumeIsolated { self?.updatePointer() }
+        }) {
+            pointerMonitors.append(global)
+        }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: moves, handler: { [weak self] event in
+            MainActor.assumeIsolated { self?.updatePointer() }
+            return event
+        }) {
+            pointerMonitors.append(local)
+        }
+        // Secours si un deplacement echappe aux moniteurs (app active sans fenetre qui suit la souris).
+        let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updatePointer() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        pointerTimer = timer
+    }
+
+    private func stopTrackingPointer() {
+        pointerMonitors.forEach(NSEvent.removeMonitor)
+        pointerMonitors.removeAll()
+        pointerTimer?.invalidate()
+        pointerTimer = nil
+        window?.ignoresMouseEvents = true
     }
 
     private func makeWindow() -> DropWindow {
@@ -119,7 +177,7 @@ private struct DropHost: View {
 
     var body: some View {
         DropView(content: DropContent(controller: controller), geometry: drop.geometry, expanded: drop.expanded,
-                 onCancel: { controller.cancel() })
+                 onCancel: { controller.cancel() }, onHeight: { drop.reportHeight($0) })
     }
 }
 
@@ -157,6 +215,8 @@ struct DropView: View {
     let geometry: NotchGeometry
     let expanded: Bool
     var onCancel: () -> Void = {}
+    /// Hauteur de la goutte une fois posee (rectangle cliquable).
+    var onHeight: (CGFloat) -> Void = { _ in }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var textHeight: CGFloat = 0
@@ -192,6 +252,7 @@ struct DropView: View {
         .animation(expanded ? .easeOut(duration: 0.22).delay(reduceMotion ? 0 : 0.06) : .easeIn(duration: 0.12),
                    value: expanded)
         .frame(width: open ? width : collapsed.width, height: open ? nil : collapsed.height, alignment: .top)
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.height }, action: { onHeight($0) })
         .padding(.horizontal, Self.flare)
         .background(DropShape(flare: Self.flare, bottomRadius: open ? Self.bottomRadius : 10).fill(.black))
         .clipShape(DropShape(flare: Self.flare, bottomRadius: open ? Self.bottomRadius : 10))

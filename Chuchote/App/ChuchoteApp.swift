@@ -25,17 +25,13 @@ struct ChuchoteApp: App {
         .commands { AboutCommands(identity: Brand.identity) }
 
         Settings {
-            SettingsView()
+            SettingsView().environment(state)
         }
 
         MenuBarExtra(isInserted: $menuBarVisible) {
             MenuBarContent().environment(state)
         } label: {
-            if Brand.glyph.isEmpty {
-                Image(systemName: "app.dashed") // repli tant que le glyphe n'est pas dessine
-            } else {
-                MenuBarIcon(glyph: Brand.glyph)
-            }
+            MenuBarLabel()
         }
     }
 }

@@ -56,4 +56,42 @@ struct BlobBoard: View {
         return window
     }
 }
+
+/// Mode capture : icone de la barre des menus au repos et pendant l'ecoute, sur une barre claire
+/// et une barre sombre (rendu indicatif : le systeme teinte lui-meme l'image modele).
+struct MenuBarBoard: View {
+    var body: some View {
+        VStack(spacing: 0) {
+            bar(dark: false)
+            bar(dark: true)
+        }
+        .fixedSize()
+    }
+
+    private func bar(dark: Bool) -> some View {
+        HStack(spacing: 18) {
+            Image(systemName: "wifi").font(.system(size: 14, weight: .medium))
+            MenuBarIcon(glyph: Brand.glyph)
+            Image(systemName: "wifi").font(.system(size: 14, weight: .medium))
+            Image(nsImage: MenuBarLabel.activePlate)
+            Text(verbatim: "lun. 13 oct.  14:32").font(.system(size: 13, weight: .medium))
+        }
+        .foregroundStyle(dark ? Color.white : Color.black)
+        .padding(.horizontal, 16)
+        .frame(height: 30)
+        .background(dark ? Color(hex: 0x2B2B2E) : Color(hex: 0xEDEDED))
+    }
+
+    @MainActor
+    static func window() -> NSWindow {
+        let host = NSHostingView(rootView: MenuBarBoard())
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: host.fittingSize),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = host
+        window.isReleasedWhenClosed = false
+        window.setFrameOrigin(NSPoint(x: 80, y: 80))
+        window.orderFrontRegardless()
+        return window
+    }
+}
 #endif

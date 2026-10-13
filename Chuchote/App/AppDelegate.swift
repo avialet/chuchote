@@ -69,6 +69,11 @@ extension AppDelegate {
                 try await Task.sleep(for: .milliseconds(400))
                 return window
             },
+            SnapshotScenario("barre-des-menus") {
+                let window = MenuBarBoard.window()
+                try await Task.sleep(for: .milliseconds(300))
+                return window
+            },
             SnapshotScenario("empty") {
                 state.clearHistory()
                 try await Task.sleep(for: .milliseconds(600))

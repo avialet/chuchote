@@ -33,6 +33,8 @@ final class DictationController {
         static let frenchTypography = Brand.key("FrenchTypography")
         static let directPaste = Brand.key("DirectPaste")
         static let keepHistory = Brand.key("KeepHistory")
+        /// Nombre de dictees conservees (`HistoryLimit.rawValue`, 0 : toutes).
+        static let historyLimit = Brand.key("HistoryLimit")
     }
 
     nonisolated static let defaultLocale = "fr_FR"
@@ -106,6 +108,7 @@ final class DictationController {
             Keys.frenchTypography: true,
             Keys.directPaste: true,
             Keys.keepHistory: true,
+            Keys.historyLimit: HistoryLimit.defaultValue.rawValue,
         ])
     }
 
@@ -304,7 +307,12 @@ final class DictationController {
             if defaults.bool(forKey: Keys.keepHistory), let store {
                 let dictation = Dictation(text: polished, duration: listenedFor, locale: localeID,
                                           targetApp: target?.localizedName)
-                if (try? store.insert(dictation)) != nil { historyVersion += 1 }
+                if (try? store.insert(dictation)) != nil {
+                    if let keep = HistoryLimit(stored: defaults.integer(forKey: Keys.historyLimit)).keepLast {
+                        _ = try? store.prune(keepLast: keep)
+                    }
+                    historyVersion += 1
+                }
             }
         }
         guard id == session else { return }

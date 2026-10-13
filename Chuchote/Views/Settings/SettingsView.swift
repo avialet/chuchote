@@ -29,6 +29,8 @@ private struct DictationCard: View {
     @AppStorage(DictationController.Keys.locale) private var locale = DictationController.defaultLocale
     @AppStorage(DictationController.Keys.directPaste) private var directPaste = true
     @AppStorage(DictationController.Keys.frenchTypography) private var frenchTypography = true
+    @AppStorage(DictationController.Keys.listeningStyle) private var listeningStyle = ListeningStyle.defaultValue.rawValue
+    @AppStorage(DictationController.Keys.liveText) private var liveText = true
 
     var body: some View {
         SettingsCard(icon: "waveform", color: Theme.accent, title: "Dict\u{00E9}e") {
@@ -40,6 +42,19 @@ private struct DictationCard: View {
             }
             .fixedSize()
             languageStatus
+
+            Picker("Affichage pendant la dict\u{00E9}e", selection: $listeningStyle) {
+                Text("Goutte d\u{2019}encoche").tag(ListeningStyle.drop.rawValue)
+                Text("Pilule en bas").tag(ListeningStyle.pill.rawValue)
+            }
+            .fixedSize()
+            .onChange(of: listeningStyle) { DictationController.shared.displaySettingsChanged() }
+            Toggle("Afficher le texte en direct", isOn: $liveText)
+                .disabled(ListeningStyle(stored: listeningStyle) == .pill)
+                .onChange(of: liveText) { DictationController.shared.displaySettingsChanged() }
+            note(ListeningStyle(stored: listeningStyle) == .pill
+                 ? "Une pilule en bas de l\u{2019}\u{00E9}cran, sans texte en direct."
+                 : "Une goutte sort de l\u{2019}encoche (en haut au centre sur un \u{00E9}cran sans encoche). Le texte en direct est un aper\u{00E7}u\u{00A0}: le texte coll\u{00E9} vient du mod\u{00E8}le complet.")
 
             Toggle("Coller l\u{00E0} o\u{00F9} est le curseur", isOn: $directPaste)
                 .onChange(of: directPaste) { _, on in

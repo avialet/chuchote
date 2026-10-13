@@ -1,0 +1,41 @@
+name: Release
+
+# Publier une version : modifier VERSION, commit, puis
+#   git tag vX.Y.Z && git push --tags
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Le tag doit correspondre a VERSION
+        run: |
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          if [ "${GITHUB_REF_NAME}" != "v${VERSION}" ]; then
+            echo "Le tag ${GITHUB_REF_NAME} ne correspond pas a VERSION (${VERSION})." >&2
+            exit 1
+          fi
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+
+      - name: Tests
+        run: make test
+
+      - name: DMG et empreinte
+        run: make release
+
+      - name: Publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Notes ecrites a la main si docs/notes/<tag>.md existe, sinon generees depuis les commits.
+          if [ -f "docs/notes/${GITHUB_REF_NAME}.md" ]; then NOTES=(--notes-file "docs/notes/${GITHUB_REF_NAME}.md"); else NOTES=(--generate-notes); fi
+          gh release create "${GITHUB_REF_NAME}" \
+            "build/Chuchote-${VERSION}.dmg" "build/Chuchote-${VERSION}.dmg.sha256" \
+            --title "Chuchote ${VERSION}" "${NOTES[@]}"

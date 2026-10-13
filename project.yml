@@ -1,0 +1,64 @@
+name: Chuchote
+options:
+  bundleIdPrefix: fr.vialet
+  deploymentTarget:
+    macOS: "26.0"
+  xcodeVersion: "26.0"
+  createIntermediateGroups: true
+# Version.xcconfig est ecrit par `make gen` depuis VERSION (MARKETING_VERSION).
+configFiles:
+  Debug: Version.xcconfig
+  Release: Version.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Manual
+    DEVELOPMENT_TEAM: ""
+    CURRENT_PROJECT_VERSION: "1"
+packages:
+  VialetKit:
+    url: https://github.com/avialet/vialetkit.git
+    # Mineur epingle (0.2.x) : en 0.x, un changement cassant du kit monte le mineur.
+    minorVersion: "0.2.0"
+  ChuchoteCore:
+    path: Packages/ChuchoteCore
+targets:
+  Chuchote:
+    type: application
+    platform: macOS
+    sources:
+      - path: Chuchote
+        excludes:
+          - "Resources/Info.plist"
+    dependencies:
+      - package: VialetKit
+      - package: ChuchoteCore
+    info:
+      path: Chuchote/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Chuchote
+        CFBundleName: Chuchote
+        LSMinimumSystemVersion: "26.0"
+        NSHumanReadableCopyright: "\u00A9 2026 Aur\u00E9lien Vialet" # YAML : \u00A9 = signe copyright
+        CFBundleURLTypes:
+          - CFBundleURLName: fr.vialet.chuchote
+            CFBundleURLSchemes: [chuchote]
+        LSApplicationCategoryType: public.app-category.productivity
+        CFBundleIconFile: AppIcon
+    entitlements:
+      path: Chuchote/Resources/Chuchote.entitlements
+      properties:
+        com.apple.security.app-sandbox: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: fr.vialet.chuchote
+        ENABLE_HARDENED_RUNTIME: false
+schemes:
+  Chuchote:
+    build:
+      targets:
+        Chuchote: all
+    run:
+      config: Debug

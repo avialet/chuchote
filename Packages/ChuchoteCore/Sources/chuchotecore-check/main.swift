@@ -1,0 +1,5 @@
+import ChuchoteCore
+
+run([
+    databaseTests,
+])

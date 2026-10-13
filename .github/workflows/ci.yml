@@ -1,0 +1,16 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+      - name: Tests du noyau
+        run: make test
+      - name: Compilation de l'app
+        run: swift build --product Chuchote

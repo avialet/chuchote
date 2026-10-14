@@ -11,8 +11,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             || ClickCheck.runIfRequested() { return }
         if writeHubManifestIfRequested() { return }
         #endif
-        AppActions.shared.publish()
-        // Le raccourci dicte ; la fenetre principale s'ouvre par le menu et le Dock.
+        _ = DockPresence.shared
+        HubPresence.start(menuBar: MenuBarPresence.shared, actions: AppActions.shared, updater: Updater.shared)
+        // Le raccourci dicte ; la fenetre principale s'ouvre par le menu (le Dock la montre ensuite).
         DictationController.shared.start()
         // Laisse l'app s'afficher avant le moindre appel reseau.
         DispatchQueue.main.asyncAfter(deadline: .now() + 6) {

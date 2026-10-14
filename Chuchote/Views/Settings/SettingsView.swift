@@ -8,8 +8,9 @@ struct SettingsView: View {
 
     var body: some View {
         SettingsScreen(app: Brand.identity, hotKey: HotKeyController.shared, updater: Updater.shared,
-                       menuBar: MenuBarPresence.shared,
+                       menuBar: MenuBarPresence.shared, dock: DockPresence.shared,
                        hotKeyHint: "Maintenir pour dicter, appui bref pour une \u{00E9}coute verrouill\u{00E9}e.",
+                       updateNote: HubPresence.updateNote,
                        width: 480) {
             DictationCard()
             HistoryCard()

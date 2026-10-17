@@ -25,6 +25,6 @@ public enum TapFormat: Equatable, Sendable {
     /// Format a donner au tap ; nil sans micro utilisable.
     public static func choose(node: Description, hardware: Description) -> TapFormat? {
         guard hardware.isAudio else { return nil }
-        return node.isAudio && node.sampleRate == hardware.sampleRate ? .node : .hardware
+        return node.isAudio && node == hardware ? .node : .hardware
     }
 }

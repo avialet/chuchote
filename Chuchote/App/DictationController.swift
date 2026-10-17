@@ -143,7 +143,7 @@ final class DictationController {
         let center = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.didWakeNotification, NSWorkspace.sessionDidBecomeActiveNotification] {
             observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.resetKey() }
+                MainActor.runOnMainThread { self?.resetKey() }
             })
         }
         (audio as? Microphone)?.prepare()
@@ -511,13 +511,13 @@ final class DictationController {
         guard keyMonitors.isEmpty else { return }
         let escape: UInt16 = 53
         if let global = NSEvent.addGlobalMonitorForEvents(matching: .keyDown, handler: { [weak self] event in
-            if event.keyCode == escape { MainActor.assumeIsolated { self?.cancel() } }
+            if event.keyCode == escape { MainActor.runOnMainThread { self?.cancel() } }
         }) {
             keyMonitors.append(global)
         }
         if let local = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: { [weak self] event in
             guard event.keyCode == escape else { return event }
-            MainActor.assumeIsolated { self?.cancel() }
+            MainActor.runOnMainThread { self?.cancel() }
             return nil
         }) {
             keyMonitors.append(local)

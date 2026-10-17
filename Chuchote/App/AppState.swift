@@ -48,7 +48,7 @@ final class AppState {
         // Autorisations accordees dans les Reglages Systeme : re-verifiees au retour dans l'app.
         activation = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification,
                                                             object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated {
+            MainActor.runOnMainThread {
                 self?.refreshSetup()
                 self?.reload()
             }

@@ -17,7 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DictationController.shared.start()
         // Laisse l'app s'afficher avant le moindre appel reseau.
         DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
-            MainActor.assumeIsolated { Updater.shared.checkAutomatically() }
+            MainActor.runOnMainThread { Updater.shared.checkAutomatically() }
         }
     }
 

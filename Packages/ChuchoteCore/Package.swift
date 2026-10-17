@@ -3,7 +3,7 @@ import Foundation
 import PackageDescription
 
 let kit: Package.Dependency = ProcessInfo.processInfo.environment["VIALETKIT_PATH"]
-    .map { .package(path: $0) } ?? .package(url: "https://github.com/avialet/vialetkit.git", .upToNextMinor(from: "0.2.6"))
+    .map { .package(path: $0) } ?? .package(url: "https://github.com/avialet/vialetkit.git", .upToNextMinor(from: "0.2.8"))
 
 let package = Package(
     name: "ChuchoteCore",

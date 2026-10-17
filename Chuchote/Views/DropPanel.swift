@@ -79,7 +79,7 @@ final class DropPanelController {
         // affichage) entre-temps l'emporte.
         let token = openCount
         DispatchQueue.main.async { [weak self] in
-            MainActor.assumeIsolated {
+            MainActor.runOnMainThread {
                 guard let self, self.openCount == token, self.window?.isVisible == true else { return }
                 self.expanded = true
             }
@@ -93,7 +93,7 @@ final class DropPanelController {
         let token = openCount
         expanded = false
         DispatchQueue.main.asyncAfter(deadline: .now() + DropView.closeDuration) { [weak self] in
-            MainActor.assumeIsolated {
+            MainActor.runOnMainThread {
                 guard let self, self.openCount == token else { return }
                 self.stopTrackingPointer()
                 window.orderOut(nil)
@@ -124,7 +124,7 @@ final class DropPanelController {
         // Jamais deux releves.
         guard pointerTimer == nil else { return }
         let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.updatePointer() }
+            MainActor.runOnMainThread { self?.updatePointer() }
         }
         RunLoop.main.add(timer, forMode: .common)
         pointerTimer = timer
@@ -133,12 +133,12 @@ final class DropPanelController {
     private func installPointerMonitors() {
         let moves: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged]
         if let global = NSEvent.addGlobalMonitorForEvents(matching: moves, handler: { [weak self] _ in
-            MainActor.assumeIsolated { self?.updatePointer() }
+            MainActor.runOnMainThread { self?.updatePointer() }
         }) {
             pointerMonitors.append(global)
         }
         if let local = NSEvent.addLocalMonitorForEvents(matching: moves, handler: { [weak self] event in
-            MainActor.assumeIsolated { self?.updatePointer() }
+            MainActor.runOnMainThread { self?.updatePointer() }
             return event
         }) {
             pointerMonitors.append(local)

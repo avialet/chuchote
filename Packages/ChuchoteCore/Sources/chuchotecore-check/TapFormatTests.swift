@@ -13,6 +13,10 @@ let tapFormatTests: (String, [Test]) = ("TapFormat", [
         expectEqual(TapFormat.choose(node: .init(sampleRate: 0, channels: 0),
                                      hardware: .init(sampleRate: 16_000, channels: 1)), .hardware)
     },
+    Test("hardwareFormatWhenTheChannelsDiffer") {
+        expectEqual(TapFormat.choose(node: .init(sampleRate: 48_000, channels: 1),
+                                     hardware: .init(sampleRate: 48_000, channels: 2)), .hardware)
+    },
     Test("noTapWithoutAMicrophone") {
         expectEqual(TapFormat.choose(node: .init(sampleRate: 48_000, channels: 1),
                                      hardware: .init(sampleRate: 0, channels: 0)), nil)

@@ -88,7 +88,7 @@ final class Microphone: AudioSource {
         // Peripherique change en pleine ecoute (AirPods, micro debranche) : le moteur s'arrete.
         configurationObserver = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.configurationChanged() }
+            MainActor.runOnMainThread { self?.configurationChanged() }
         }
         return stream
     }
@@ -188,7 +188,7 @@ private final class MicrophoneTap: @unchecked Sendable {
         if sinceLastPublish >= Self.publishInterval {
             sinceLastPublish = 0
             DispatchQueue.main.async { [self] in
-                MainActor.assumeIsolated {
+                MainActor.runOnMainThread {
                     guard !stopped else { return }
                     publish(level)
                 }

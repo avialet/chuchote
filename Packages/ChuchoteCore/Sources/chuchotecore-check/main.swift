@@ -11,4 +11,5 @@ run([
     historyListTests,
     setupTests,
     liveTextTests,
+    tapFormatTests,
 ])

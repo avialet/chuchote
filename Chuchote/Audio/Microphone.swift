@@ -68,8 +68,7 @@ final class Microphone: AudioSource {
     func start(sampleRate: Double) throws -> AsyncStream<AudioChunk> {
         stop()
         let input = engine.inputNode
-        let format = input.outputFormat(forBus: 0)
-        guard format.sampleRate > 0, format.channelCount > 0,
+        guard let format = Self.tapFormat(input),
               let target = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate,
                                          channels: 1, interleaved: false),
               let converter = PCMConverter(from: format, to: target) else { throw Failure.noInput }
@@ -94,6 +93,19 @@ final class Microphone: AudioSource {
         return stream
     }
 
+    /// Format du tap a la frequence du materiel : le format du noeud, fige par `prepare()`, peut etre
+    /// perime (micro Bluetooth passe a 24 kHz) et `installTap` leverait une exception Objective-C.
+    private static func tapFormat(_ input: AVAudioInputNode) -> AVAudioFormat? {
+        let node = input.outputFormat(forBus: 0)
+        let hardware = input.inputFormat(forBus: 0)
+        switch TapFormat.choose(node: .init(sampleRate: node.sampleRate, channels: Int(node.channelCount)),
+                                hardware: .init(sampleRate: hardware.sampleRate, channels: Int(hardware.channelCount))) {
+        case .node: return node
+        case .hardware: return hardware
+        case nil: return nil
+        }
+    }
+
     private func makeTap(converter: PCMConverter,
                          continuation: AsyncStream<AudioChunk>.Continuation) -> MicrophoneTap {
         MicrophoneTap(converter: converter, continuation: continuation) { [weak self] level in
@@ -108,8 +120,7 @@ final class Microphone: AudioSource {
         let input = engine.inputNode
         input.removeTap(onBus: 0)
         old.retire()
-        let format = input.outputFormat(forBus: 0)
-        guard format.sampleRate > 0, format.channelCount > 0,
+        guard let format = Self.tapFormat(input),
               let converter = PCMConverter(from: format, to: target) else {
             interrupt()
             return
